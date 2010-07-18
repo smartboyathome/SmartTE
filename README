@@ -1,0 +1,3 @@
+This is just a temporary readme since there isn't really much to say about
+SmartTE. It depends on PyGTK, which should pull in all other needed
+dependancies. Happy writing with this text editor. ;)
