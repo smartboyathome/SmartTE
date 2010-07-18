@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # Thanks a lot to nemo_ on irc.gnome.org for help on this and Kuleshov Alexander for undostack!
 
-import pygtk, gtk, os, re, sys, gobject, imp, pango, copy, undostack
+import pygtk, gtk, os, re, sys, gobject, imp, pango, undostack
 pygtk.require('2.0')
 if not os.path.exists(os.path.join(os.path.expanduser('~'), '.smartte', 'Default.conf')):
     os.makedirs(os.path.join(os.path.expanduser('~'), '.smartte'))
