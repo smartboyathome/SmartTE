@@ -476,6 +476,38 @@ class MainWindow(object):
             self.typed = False
 
 
+    def spellSuggest(self, widget, menu):
+        x, y = self.textView.get_pointer()
+        x, y = self.textView.window_to_buffer_coords(gtk.TEXT_WINDOW_WIDGET, x, y)
+        if self.textView.get_iter_at_location(x, y).has_tag(self.errTag):
+            beginWord = self.textView.get_iter_at_location(x, y)
+            endWord = self.textView.get_iter_at_location(x, y)
+            if beginWord.starts_word():
+                endWord.forward_word_end()
+            elif endWord.ends_word():
+                beginWord.backward_word_start()
+            elif beginWord.inside_word():
+                endWord.forward_word_end()
+                beginWord.backward_word_start()
+            suggestions = self.dict.suggest(self.textBuffer.get_text(beginWord, endWord))
+            suggestItem = gtk.MenuItem(label='Spelling Suggestions')
+            suggestMenu = gtk.Menu()
+            for word in suggestions:
+                item = gtk.MenuItem(label=word)
+                item.connect('activate', self.replaceWord, word, beginWord, endWord)
+                suggestMenu.add(item)
+            suggestItem.set_submenu(suggestMenu)
+            suggestItem.show_all()
+            menu.insert(suggestItem, 0)
+
+
+    def replaceWord(self, item, word, beginWord, endWord):
+        wordPos = self.textBuffer.create_mark(None, beginWord)
+        self.textBuffer.delete(beginWord, endWord)
+        self.textBuffer.insert(self.textBuffer.get_iter_at_mark(wordPos), word)
+        self.textBuffer.delete_mark(wordPos)
+
+
     def __init__(self):
         self.window = gtk.Window()
         self.window.set_border_width(0)
@@ -496,6 +528,7 @@ class MainWindow(object):
         textScroll.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
         self.textView.connect_after('move-cursor', self.dectForm)
         self.textView.connect('button-release-event', self.dectForm)
+        self.textView.connect('populate-popup', self.spellSuggest)
         self.insertId = self.textBuffer.connect_after('insert-text', self.persistAttr)
 
         self.curPos = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
