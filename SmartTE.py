@@ -70,11 +70,21 @@ class MainWindow(object):
         del self.filename
 
 
+    def genFileFilters(self, fileSel):
+        allFilter = gtk.FileFilter()
+        allFilter.set_name('All Files')
+        allFilter.add_pattern('*')
+        fileSel.add_filter(allFilter)
+
+
     def openFile(self, widget, data=None):
         fileSel =  gtk.FileChooserDialog(title='Open File', action=gtk.FILE_CHOOSER_ACTION_OPEN, buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_OPEN, gtk.RESPONSE_OK))
+        self.genFileFilters(fileSel)
         response = fileSel.run()
         if response == gtk.RESPONSE_OK:
             self.openFileCli(fileSel.get_filename())
+            fileSel.destroy()
+        elif response == gtk.RESPONSE_CANCEL:
             fileSel.destroy()
 
 
@@ -92,6 +102,7 @@ class MainWindow(object):
 
     def saveAsFile(self, widget, data=None):
         fileSel =  gtk.FileChooserDialog(title='Save File', action=gtk.FILE_CHOOSER_ACTION_SAVE, buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_SAVE, gtk.RESPONSE_OK))
+        self.genFileFilters(fileSel)
         response = fileSel.run()
         if response == gtk.RESPONSE_OK:
             self.filename = fileSel.get_filename()
