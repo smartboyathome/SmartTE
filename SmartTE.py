@@ -58,22 +58,11 @@ class MainWindow(object):
     def keyBindings(self, widget, keyCombo):
         print keyCombo
         if keyCombo == 'ctrl+shift+c':
-            self.textConvertFrom(widget)
+            self.textCopyTo()
         elif keyCombo == 'ctrl+shift+x':
             self.textConvertFrom(widget)
             outputStart, outputEnd = self.textBuffer.get_selection_bounds()
             self.textBuffer.delete(outputStart, outputEnd)
-
-
-    def changeJust(self, widget, data=None):
-        if self.justLeftButton.get_active():
-            self.textView.set_justification(gtk.JUSTIFY_LEFT)
-        elif self.justCenterButton.get_active():
-            self.textView.set_justification(gtk.JUSTIFY_CENTER)
-        elif self.justRightButton.get_active():
-            self.textView.set_justification(gtk.JUSTIFY_RIGHT)
-        elif self.justFillButton.get_active():
-            self.textView.set_justification(gtk.JUSTIFY_FILL)
 
 
     def newFile(self, widget, data=None):
@@ -95,7 +84,10 @@ class MainWindow(object):
         FileData = File.read()
         File.close()
         self.textConvertFrom(FileData)
+        self.openCheckSpelling()
         self.textBuffer.set_modified(False)
+        self.curPos = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()))
+        self.curOldPos = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()))
 
 
     def saveAsFile(self, widget, data=None):
@@ -282,7 +274,20 @@ class MainWindow(object):
             tmpBuffer.apply_tag_by_name('underline', tmpBuffer.get_iter_at_mark(start), tmpBuffer.get_iter_at_mark(end))
         self.textBuffer.set_text('')
         deserialization = self.textBuffer.register_deserialize_tagset()
+        self.textBuffer.handler_block(self.insertId)
         self.textBuffer.deserialize(self.textBuffer, deserialization, self.textBuffer.get_start_iter(), tmpBuffer.serialize(tmpBuffer, "application/x-gtk-text-buffer-rich-text", tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()))
+        self.textBuffer.handler_unblock(self.insertId)
+
+
+    def changeJust(self, widget, data=None):
+        if self.justLeftButton.get_active():
+            self.textView.set_justification(gtk.JUSTIFY_LEFT)
+        elif self.justCenterButton.get_active():
+            self.textView.set_justification(gtk.JUSTIFY_CENTER)
+        elif self.justRightButton.get_active():
+            self.textView.set_justification(gtk.JUSTIFY_RIGHT)
+        elif self.justFillButton.get_active():
+            self.textView.set_justification(gtk.JUSTIFY_FILL)
 
 
     def startPrefs(self, widget, data=None):
@@ -309,9 +314,11 @@ class MainWindow(object):
 
 
     def saveCurPos(self):
-        if self.curOldPos != self.curPos:
-            self.curOldPos = self.curPos
-        self.curPos = self.textBuffer.get_insert()
+        if self.textBuffer.get_iter_at_mark(self.curOldPos) != self.textBuffer.get_iter_at_mark(self.curPos):
+            self.textBuffer.delete_mark(self.curOldPos)
+            self.curOldPos = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.curPos))
+            self.textBuffer.delete_mark(self.curPos)
+        self.curPos = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()))
 
 
     def persistAttr(self, widget, iter, text, num):
@@ -331,6 +338,32 @@ class MainWindow(object):
             pass
         else:
             self.textBuffer.apply_tag_by_name('underline', self.textBuffer.get_iter_at_mark(self.undlStart), self.textBuffer.get_iter_at_mark(self.undlEnd))
+        if text == ' ':
+            beginWord = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
+            endWord = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
+            beginWord.backward_word_start()
+            endWord.backward_word_start()
+            endWord.forward_word_end()
+            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)):
+                self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+        elif not self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).is_end():
+            self.typed = True
+
+
+    def openCheckSpelling(self):
+        beginWord = self.textBuffer.get_start_iter()
+        endWord = self.textBuffer.get_start_iter()
+        keepGoing = endWord.forward_word_end()
+        if not beginWord.starts_word():
+            beginWord.forward_word_end()
+            beginWord.backward_word_start()
+        if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)):
+            self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+        while endWord.forward_word_end():
+            beginWord.forward_word_ends(2)
+            beginWord.backward_word_start()
+            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)):
+                self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
 
 
     def boldText(self, widget, data=None):
@@ -397,30 +430,50 @@ class MainWindow(object):
 
 
     def dectForm(self, widget, event, *user):
-        if self.textBuffer.get_iter_at_offset(self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).get_offset()-1).has_tag(self.boldTag) and not self.boldButton.get_active():
+        self.saveCurPos()
+        curIter = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
+        curIter.backward_char()
+        if curIter.has_tag(self.boldTag) and not self.boldButton.get_active():
             self.boldButton.handler_block(self.boldHandId)
             self.boldButton.set_active(True)
             self.boldButton.handler_unblock(self.boldHandId)
-        elif self.italButton.get_active() and not self.textBuffer.get_iter_at_offset(self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).get_offset()-1).has_tag(self.boldTag):
+        elif self.italButton.get_active() and not curIter.has_tag(self.boldTag):
             self.boldButton.handler_block(self.boldHandId)
             self.boldButton.set_active(False)
             self.boldButton.handler_unblock(self.boldHandId)
-        if self.textBuffer.get_iter_at_offset(self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).get_offset()-1).has_tag(self.italTag) and not self.italButton.get_active():
+        curIter = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
+        curIter.backward_char()
+        if curIter.has_tag(self.italTag) and not self.italButton.get_active():
             self.italButton.handler_block(self.italHandId)
             self.italButton.set_active(True)
             self.italButton.handler_unblock(self.italHandId)
-        elif self.italButton.get_active() and not self.textBuffer.get_iter_at_offset(self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).get_offset()-1).has_tag(self.italTag):
+        elif self.italButton.get_active() and not curIter.has_tag(self.italTag):
             self.italButton.handler_block(self.italHandId)
             self.italButton.set_active(False)
             self.italButton.handler_unblock(self.italHandId)
-        if self.textBuffer.get_iter_at_offset(self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).get_offset()-1).has_tag(self.undlTag) and not self.undlButton.get_active():
+        curIter = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
+        curIter.backward_char()
+        if curIter.has_tag(self.undlTag) and not self.undlButton.get_active():
             self.undlButton.handler_block(self.undlHandId)
             self.undlButton.set_active(True)
             self.undlButton.handler_unblock(self.undlHandId)
-        elif self.undlButton.get_active() and not self.textBuffer.get_iter_at_offset(self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).get_offset()-1).has_tag(self.undlTag):
+        elif self.undlButton.get_active() and not curIter.has_tag(self.undlTag):
             self.undlButton.handler_block(self.undlHandId)
             self.undlButton.set_active(False)
             self.undlButton.handler_unblock(self.undlHandId)
+        if self.typed:
+            beginWord = self.textBuffer.get_iter_at_mark(self.curOldPos)
+            endWord = self.textBuffer.get_iter_at_mark(self.curOldPos)
+            if beginWord.starts_word():
+                endWord.forward_word_end()
+            elif endWord.ends_word():
+                beginWord.backward_word_start()
+            elif beginWord.inside_word():
+                endWord.forward_word_end()
+                beginWord.backward_word_start()
+            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)):
+                self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+            self.typed = False
 
 
     def __init__(self):
@@ -443,10 +496,12 @@ class MainWindow(object):
         textScroll.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
         self.textView.connect_after('move-cursor', self.dectForm)
         self.textView.connect('button-release-event', self.dectForm)
-        self.textBuffer.connect_after('insert-text', self.persistAttr)
+        self.insertId = self.textBuffer.connect_after('insert-text', self.persistAttr)
 
-        self.curPos = self.textBuffer.get_insert()
-        self.curOldPos = self.curPos
+        self.curPos = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
+        self.curOldPos = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
+        self.dict = enchant.Dict()
+        self.typed = False
 
         newButton = gtk.ToolButton(gtk.STOCK_NEW)
         newButton.connect('clicked', self.newFile)
@@ -535,6 +590,9 @@ class MainWindow(object):
         self.undlTag = gtk.TextTag('underline')
         self.undlTag.set_property('underline', pango.UNDERLINE_SINGLE)
         self.textTags.add(self.undlTag)
+        self.errTag = gtk.TextTag('error')
+        self.errTag.set_property('underline', pango.UNDERLINE_ERROR)
+        self.textTags.add(self.errTag)
 
         notebook = gtk.Notebook()
         notebook.set_tab_pos(gtk.POS_TOP)
