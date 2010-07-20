@@ -1,45 +1,12 @@
 #!/usr/bin/env python
 # Thanks a lot to nemo_ on irc.gnome.org for help on this and Kuleshov Alexander for undostack!
 
-import pygtk, gtk, os, re, sys, gobject, imp, pango, enchant, undostack
+import pygtk, gtk, os, re, sys, gobject, copy, pango, ast, tempfile, enchant, undostack
 pygtk.require('2.0')
-if not os.path.exists(os.path.join(os.path.expanduser('~'), '.smartte', 'Default.conf')):
-    os.makedirs(os.path.join(os.path.expanduser('~'), '.smartte'))
-    confFile = open(os.path.join(os.path.expanduser('~'), '.smartte', 'Default.conf'), 'wb')
-    confFile.write("customTemplate = False\ncustomHeader = None\ncustomFooter = None")
-    confFile.close()
-imp.load_source('config', os.path.join(os.path.expanduser('~'), '.smartte', 'Default.conf'))
-import config
 
+if not os.path.exists(os.path.join(os.path.expanduser('~'), '.config', 'smartte')):
+    os.mkdir(os.path.join(os.path.expanduser('~'), '.config', 'smartte'))
 
-def delete_module(modname, paranoid=None):
-    from sys import modules
-    try:
-        thismod = modules[modname]
-    except KeyError:
-        raise ValueError(modname)
-    these_symbols = dir(thismod)
-    if paranoid:
-        try:
-            paranoid[:]  # sequence support
-        except:
-            raise ValueError('must supply a finite list for paranoid')
-        else:
-            these_symbols = paranoid[:]
-    del modules[modname]
-    for mod in modules.values():
-        try:
-            delattr(mod, modname)
-        except AttributeError:
-            pass
-        if paranoid:
-            for symbol in these_symbols:
-                if symbol[:2] == '__':  # ignore special symbols
-                    continue
-                try:
-                    delattr(mod, symbol)
-                except AttributeError:
-                    pass
 
 
 class MainWindow(object):
@@ -71,10 +38,15 @@ class MainWindow(object):
 
 
     def genFileFilters(self, fileSel):
-        allFilter = gtk.FileFilter()
-        allFilter.set_name('All Files')
-        allFilter.add_pattern('*')
-        fileSel.add_filter(allFilter)
+        filter = gtk.FileFilter()
+        filter.set_name('All Files')
+        filter.add_pattern('*')
+        fileSel.add_filter(filter)
+        filter = gtk.FileFilter()
+        filter.set_name('Plain Text+BBCode')
+        filter.add_mime_type('text/plain')
+        filter.add_pattern('*.txt')
+        fileSel.add_filter(filter)
 
 
     def openFile(self, widget, data=None):
@@ -91,21 +63,71 @@ class MainWindow(object):
     def openFileCli(self, filename):
         self.filename = filename
         File = open(self.filename, 'r')
-        FileData = File.read()
+        tmpFileData = File.read()
         File.close()
-        self.textConvertFrom(FileData)
+        firstLine = tmpFileData[:tmpFileData.find('\n')+1]
+        tmpReg = re.compile(r'{*}\n')
+        if not tmpReg.search(firstLine) == None:
+            self.docSettings = ast.literal_eval(firstLine[:-1])
+            fileData = tmpFileData[tmpFileData.find('\n')+1:]
+            self.textConvertFrom(fileData)
+            if not self.docSettings['ignoreList'] == []:
+                for begin, end in self.docSettings['ignoreList']:
+                    self.textBuffer.apply_tag_by_name('ignore', self.textBuffer.get_iter_at_offset(begin), self.textBuffer.get_iter_at_offset(end))
+            del(self.docSettings['ignoreList'])
+            for word in self.docSettings['docDict']:
+                self.dict.add(word)
+        else:
+            fileData = tmpFileData
+            self.textConvertFrom(fileData)
         self.openCheckSpelling()
         self.textBuffer.set_modified(False)
         self.curPos = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()))
         self.curOldPos = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()))
 
 
+    def writeFile(self):
+        docText = self.textConvertTo()
+        tmpSettings = copy.deepcopy(self.docSettings)
+        tmpSettings['ignoreList'] = []
+        if not tmpSettings['saveIgnore']:
+            tmpSettings['ignoreAllList'] = []
+        else:
+            tmpIter = self.textBuffer.get_start_iter()
+            if tmpIter.begins_tag(self.ignoreTag):
+                beginIter = self.textBuffer.get_iter_at_offset(tmpIter.get_offset())
+            else:
+                tmpIter.forward_to_tag_toggle(self.ignoreTag)
+                beginIter = self.textBuffer.get_iter_at_offset(tmpIter.get_offset())
+            tmpIter.forward_to_tag_toggle(self.ignoreTag)
+            endIter = tmpIter
+            tmpSettings['ignoreList'].append((beginIter.get_offset(), endIter.get_offset()))
+            tmpVar = tmpIter.forward_to_tag_toggle(self.ignoreTag)
+            while tmpVar:
+                beginIter = self.textBuffer.get_iter_at_offset(tmpIter.get_offset())
+                tmpIter.forward_to_tag_toggle(self.ignoreTag)
+                endIter = tmpIter
+                tmpSettings['ignoreList'].append((beginIter.get_offset(), endIter.get_offset()))
+                tmpVar = tmpIter.forward_to_tag_toggle(self.ignoreTag)
+        finalDoc = str(tmpSettings) + '\n' + docText
+        File = open(self.filename, 'w')
+        File.write(finalDoc)
+        File.close()
+        self.textBuffer.set_modified(False)
+
+
     def saveAsFile(self, widget, data=None):
         fileSel =  gtk.FileChooserDialog(title='Save File', action=gtk.FILE_CHOOSER_ACTION_SAVE, buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_SAVE, gtk.RESPONSE_OK))
         self.genFileFilters(fileSel)
+        saveIgnore = gtk.CheckButton('Save Ignore and IgnoreAll lists with file?')
+        saveIgnore.set_active(True)
+        saveIgnore.set_tooltip_text('If you choose not to save these lists, then you will have to remark them again when you open up the file again.')
+        saveIgnore.show()
+        fileSel.set_extra_widget(saveIgnore)
         response = fileSel.run()
         if response == gtk.RESPONSE_OK:
             self.filename = fileSel.get_filename()
+            self.docSettings['saveIgnore'] = saveIgnore.get_active()
             if os.path.exists(self.filename):
                 checkDialog = gtk.MessageDialog(fileSel,gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_NONE, 'The file ' + os.path.basename(self.filename) + ' already exists, are you sure you want to overwrite it?')
                 checkDialog.add_button(gtk.STOCK_NO, gtk.RESPONSE_NO)
@@ -114,20 +136,13 @@ class MainWindow(object):
                 if checkResponse == gtk.RESPONSE_YES:
                     fileSel.destroy()
                     checkDialog.destroy()
-                    File = open(self.filename, 'w')
-                    File.write(self.textConvertTo())
-                    File.close()
-                    self.textBuffer.set_modified(False)
+                    self.writeFile()
                 elif checkResponse == gtk.RESPONSE_NO:
                     fileSel.destroy()
                     checkDialog.destroy()
             else:
                 fileSel.destroy()
-                outputStart, outputEnd = self.textBuffer.get_bounds()
-                File = open(self.filename, 'w')
-                File.write(self.textBuffer.get_text(outputStart, outputEnd, True))
-                File.close()
-                self.textBuffer.set_modified(False)
+                self.writeFile()
         elif response == gtk.RESPONSE_CANCEL:
             fileSel.destroy()
 
@@ -137,11 +152,7 @@ class MainWindow(object):
         except AttributeError:
             self.saveAsFile(widget)
         else:
-            outputStart, outputEnd = self.textBuffer.get_bounds()
-            File = open(self.filename, 'w')
-            File.write(self.textConvertTo())
-            File.close()
-            self.textBuffer.set_modified(False)
+            self.writeFile()
 
 
     def textConvertTo(self, pos=0):
@@ -293,27 +304,16 @@ class MainWindow(object):
     def changeJust(self, widget, data=None):
         if self.justLeftButton.get_active():
             self.textView.set_justification(gtk.JUSTIFY_LEFT)
+            self.docSettings['justStyle'] = 'left'
         elif self.justCenterButton.get_active():
             self.textView.set_justification(gtk.JUSTIFY_CENTER)
+            self.docSettings['justStyle'] = 'center'
         elif self.justRightButton.get_active():
             self.textView.set_justification(gtk.JUSTIFY_RIGHT)
+            self.docSettings['justStyle'] = 'right'
         elif self.justFillButton.get_active():
             self.textView.set_justification(gtk.JUSTIFY_FILL)
-
-
-    def startPrefs(self, widget, data=None):
-        pref_window = prefWindow()
-        pref_window.main()
-
-
-    def hidePane(self, widget, data=None):
-        self.toggleText2 = "%s" % ((False, True)[widget.get_active()])
-        if self.toggleText2:
-            print 'Showing'
-            self.textScroll2.show_all()
-        else:
-            print 'Hiding'
-            self.textScroll2.hide_all()
+            self.docSettings['justStyle'] = 'fill'
 
 
     def undoEntry(self, widget, data=None):
@@ -355,7 +355,7 @@ class MainWindow(object):
             beginWord.backward_word_start()
             endWord.backward_word_start()
             endWord.forward_word_end()
-            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)):
+            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord))and not beginWord.has_tag(self.ignoreTag) and not self.textBuffer.get_text(beginWord, endWord) in self.docSettings['ignoreAllList']:
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
         elif not self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).is_end():
             self.typed = True
@@ -373,7 +373,7 @@ class MainWindow(object):
         while endWord.forward_word_end():
             beginWord.forward_word_ends(2)
             beginWord.backward_word_start()
-            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)):
+            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)) and not beginWord.has_tag(self.ignoreTag) and not self.textBuffer.get_text(beginWord, endWord) in self.docSettings['ignoreAllList']:
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
 
 
@@ -440,7 +440,7 @@ class MainWindow(object):
                     del(self.undlEnd)
 
 
-    def dectForm(self, widget, event, *user):
+    def dectForm(self, widget=None, event=None, beginWord=None, endWord=None):
         self.saveCurPos()
         curIter = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
         curIter.backward_char()
@@ -473,16 +473,17 @@ class MainWindow(object):
             self.undlButton.set_active(False)
             self.undlButton.handler_unblock(self.undlHandId)
         if self.typed:
-            beginWord = self.textBuffer.get_iter_at_mark(self.curOldPos)
-            endWord = self.textBuffer.get_iter_at_mark(self.curOldPos)
-            if beginWord.starts_word():
-                endWord.forward_word_end()
-            elif endWord.ends_word():
-                beginWord.backward_word_start()
-            elif beginWord.inside_word():
-                endWord.forward_word_end()
-                beginWord.backward_word_start()
-            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)):
+            if beginWord == None or endWord == None:
+                beginWord = self.textBuffer.get_iter_at_mark(self.curOldPos)
+                endWord = self.textBuffer.get_iter_at_mark(self.curOldPos)
+                if beginWord.starts_word():
+                    endWord.forward_word_end()
+                elif endWord.ends_word():
+                    beginWord.backward_word_start()
+                elif beginWord.inside_word():
+                    endWord.forward_word_end()
+                    beginWord.backward_word_start()
+            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)) and not beginWord.has_tag(self.ignoreTag) and not self.textBuffer.get_text(beginWord, endWord) in self.docSettings['ignoreAllList']:
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
             self.typed = False
 
@@ -490,7 +491,18 @@ class MainWindow(object):
     def spellSuggest(self, widget, menu):
         x, y = self.textView.get_pointer()
         x, y = self.textView.window_to_buffer_coords(gtk.TEXT_WINDOW_WIDGET, x, y)
-        if self.textView.get_iter_at_location(x, y).has_tag(self.errTag):
+        curIter = self.textView.get_iter_at_location(x, y)
+        beginWord = self.textView.get_iter_at_location(x, y)
+        endWord = self.textView.get_iter_at_location(x, y)
+        if beginWord.starts_word():
+            endWord.forward_word_end()
+        elif endWord.ends_word():
+            beginWord.backward_word_start()
+        elif beginWord.inside_word():
+            endWord.forward_word_end()
+            beginWord.backward_word_start()
+        word = self.textBuffer.get_text(beginWord, endWord)
+        if curIter.has_tag(self.errTag):
             beginWord = self.textView.get_iter_at_location(x, y)
             endWord = self.textView.get_iter_at_location(x, y)
             if beginWord.starts_word():
@@ -500,23 +512,143 @@ class MainWindow(object):
             elif beginWord.inside_word():
                 endWord.forward_word_end()
                 beginWord.backward_word_start()
-            suggestions = self.dict.suggest(self.textBuffer.get_text(beginWord, endWord))
+            suggestions = self.dict.suggest(word)
             suggestItem = gtk.MenuItem(label='Spelling Suggestions')
             suggestMenu = gtk.Menu()
-            for word in suggestions:
-                item = gtk.MenuItem(label=word)
-                item.connect('activate', self.replaceWord, word, beginWord, endWord)
+            for newWord in suggestions:
+                item = gtk.MenuItem(label=newWord)
+                item.connect('activate', self.replaceWord, newWord, beginWord, endWord)
                 suggestMenu.add(item)
+            sep1 = gtk.SeparatorMenuItem()
+            suggestMenu.add(sep1)
+            ignoreItem = gtk.MenuItem(label='Add to ignore list')
+            ignoreItem.connect('activate', self.ignoreWord, beginWord, endWord)
+            ignoreItem.set_tooltip_text('Ignores this instance')
+            suggestMenu.add(ignoreItem)
+            ignoreAllItem = gtk.MenuItem(label='Add to ignore all list')
+            ignoreAllItem.connect('activate', self.ignoreAllWords, beginWord, endWord)
+            ignoreAllItem.set_tooltip_text('Ignores all instances')
+            suggestMenu.add(ignoreAllItem)
+            docDictItem = gtk.MenuItem(label='Add to document dictionary')
+            docDictItem.connect('activate', self.docDict, 'add', beginWord, endWord)
+            suggestMenu.add(docDictItem)
+            dictItem = gtk.MenuItem(label='Add to global dictionary')
+            dictItem.connect('activate', self.globalDict, 'add', word, beginWord, endWord)
+            suggestMenu.add(dictItem)
             suggestItem.set_submenu(suggestMenu)
             suggestItem.show_all()
             menu.insert(suggestItem, 0)
+        if curIter.has_tag(self.ignoreTag):
+            item = gtk.MenuItem(label='Remove from ignore list')
+            item.connect('activate', self.unIgnoreWord, beginWord, endWord)
+            item.show()
+            menu.insert(item, 0)
+        elif word in self.docSettings['ignoreAllList']:
+            item = gtk.MenuItem(label='Remove from ignore all list')
+            item.connect('activate', self.unIgnoreAllWords, word, beginWord, endWord)
+            item.show()
+            menu.insert(item, 0)
+        elif word in self.docSettings['docDict']:
+            item = gtk.MenuItem(label='Remove from document dictionary')
+            item.connect('activate', self.docDict, 'remove', word, beginWord, endWord)
+            item.show()
+            menu.insert(item, 0)
+        elif self.globalDict('search', word):
+            item = gtk.MenuItem(label='Remove from global dictionary')
+            item.connect('activate', self.globalDict, 'remove', word, beginWord, endWord)
+            item.show()
+            menu.insert(item, 0)
 
 
     def replaceWord(self, item, word, beginWord, endWord):
-        wordPos = self.textBuffer.create_mark(None, beginWord)
+        self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+        wordPos = self.textBuffer.create_mark(None, beginWord, True)
+        wordTags = beginWord.get_tags()
         self.textBuffer.delete(beginWord, endWord)
         self.textBuffer.insert(self.textBuffer.get_iter_at_mark(wordPos), word)
+        beginWord = self.textBuffer.get_iter_at_mark(wordPos)
+        endWord = self.textBuffer.get_iter_at_mark(wordPos)
+        endWord.forward_word_end()
+        for tag in wordTags:
+            self.textBuffer.apply_tag(tag, beginWord, endWord)
         self.textBuffer.delete_mark(wordPos)
+
+
+    def ignoreWord(self, item, beginWord, endWord):
+        self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+        self.textBuffer.apply_tag_by_name('ignore', beginWord, endWord)
+
+
+    def unIgnoreWord(self, item, beginWord, endWord):
+        self.textBuffer.remove_tag_by_name('ignore', beginWord, endWord)
+        self.typed = True
+        self.dectForm(beginWord=beginWord, endWord=endWord)
+
+
+    def ignoreAllWords(self, item, beginWord, endWord):
+        self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+        self.docSettings['ignoreAllList'].append(self.textBuffer.get_text(beginWord, endWord))
+
+
+    def unIgnoreAllWords(self, item, word, beginWord, endWord):
+        self.docSettings['ignoreAllList'].remove(word)
+        self.typed = True
+        self.dectForm(beginWord=beginWord, endWord=endWord)
+
+
+    def docDict(self, item, command, word=None, beginWord=None, endWord=None):
+        if command == 'add':
+            if beginWord != None:
+                self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+            self.dict.add(word)
+            self.docSettings['docDict'].append(word)
+        elif command == 'remove':
+            self.docSettings['docDict'].remove(word)
+            self.typed = True
+            self.dectForm(beginWord=beginWord, endWord=endWord)
+
+
+    def globalDict(self, command, word=None, beginWord=None, endWord=None):
+        if command == 'init':
+            self.dictFile = os.path.join(os.path.expanduser('~'), '.config', 'smartte', 'dict')
+            if not os.path.exists(self.dictFile):
+                f = open(self.dictFile, 'w')
+                f.write('SmartTE')
+                f.close()
+                self.dict.add('SmartTE')
+            else:
+                f = open(self.dictFile, 'r')
+                for line in f:
+                    self.dict.add(line)
+                f.close()
+        elif command == 'add':
+            if beginWord != None:
+                self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+            f = open(self.dictFile, 'a')
+            f.write('\n' + word)
+            f.close()
+            self.dict.add(word)
+        elif command == 'search':
+            f = open(self.dictFile, 'r')
+            tmpText = f.read()
+            f.close()
+            tmpList = tmpText.split('\n')
+            if word in tmpList:
+                return True
+            else:
+                return False
+        elif command == 'remove':
+            f = open(self.dictFile, 'w')
+            tmpText = f.read()
+            tmpList = tmpText.split('\n')
+            tmpList.remove(word)
+            tmpText = tmpList[0]
+            for word in tmpList[1:]:
+                tmpText = tmpText + '\n' + word
+            f.write(tmpText)
+            f.close()
+            self.typed = True
+            self.dectForm(beginWord=beginWord, endWord=endWord)
 
 
     def __init__(self):
@@ -545,7 +677,9 @@ class MainWindow(object):
         self.curPos = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
         self.curOldPos = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
         self.dict = enchant.Dict()
+        self.globalDict('init')
         self.typed = False
+        self.docSettings = {'justStyle':'left', 'saveIgnore':True, 'ignoreAllList':[], 'docDict':[]}
 
         newButton = gtk.ToolButton(gtk.STOCK_NEW)
         newButton.connect('clicked', self.newFile)
@@ -559,14 +693,9 @@ class MainWindow(object):
         saveAsButton = gtk.ToolButton(gtk.STOCK_SAVE_AS)
         saveAsButton.connect('clicked', self.saveAsFile)
         saveAsButton.set_tooltip_text('Save current file under a new name')
-        #prefButton = gtk.ToolButton(gtk.STOCK_PREFERENCES)
-        #prefButton.connect('clicked', self.startPrefs)
         copyButton = gtk.ToolButton(gtk.STOCK_COPY)
         copyButton.connect('clicked', self.textCopyTo)
         copyButton.set_tooltip_text('Copy to BBCode')
-        #paneToggle = gtk.ToggleToolButton(gtk.STOCK_FILE)
-        #paneToggle.set_active(True)
-        #paneToggle.connect('toggled', self.hidePane)
         undoButton = gtk.ToolButton(gtk.STOCK_UNDO)
         undoButton.connect('clicked', self.undoEntry)
         undoButton.set_tooltip_text('Undo previous action')
@@ -582,9 +711,7 @@ class MainWindow(object):
         filebar.insert(openButton, 1)
         filebar.insert(saveButton, 2)
         filebar.insert(saveAsButton, 3)
-        #filebar.insert(prefButton, 4)
         filebar.insert(copyButton, 4)
-        #filebar.insert(paneToggle, 5)
         filebar.insert(undoButton, 5)
         filebar.insert(redoButton, 6)
         filebar.insert(quitButton, 7)
@@ -602,16 +729,16 @@ class MainWindow(object):
         sep1 = gtk.SeparatorToolItem()
         sep1.set_tooltip_text('I\'m just a lonely, little separator. :\'(')
         self.justLeftButton = gtk.RadioToolButton(None, gtk.STOCK_JUSTIFY_LEFT)
-        self.justLeftButton.connect('toggled', self.changeJust)
+        self.leftId = self.justLeftButton.connect('toggled', self.changeJust)
         self.justLeftButton.set_tooltip_text('Justify text to the left')
         self.justCenterButton = gtk.RadioToolButton(self.justLeftButton, gtk.STOCK_JUSTIFY_CENTER)
-        self.justCenterButton.connect('toggled', self.changeJust)
+        self.centerId = self.justCenterButton.connect('toggled', self.changeJust)
         self.justCenterButton.set_tooltip_text('Justify text to the center')
         self.justRightButton = gtk.RadioToolButton(self.justLeftButton, gtk.STOCK_JUSTIFY_RIGHT)
-        self.justRightButton.connect('toggled', self.changeJust)
+        self.rightId = self.justRightButton.connect('toggled', self.changeJust)
         self.justRightButton.set_tooltip_text('Justify text to the right')
         self.justFillButton = gtk.RadioToolButton(self.justLeftButton, gtk.STOCK_JUSTIFY_FILL)
-        self.justFillButton.connect('toggled', self.changeJust)
+        self.fillId = self.justFillButton.connect('toggled', self.changeJust)
         self.justFillButton.set_tooltip_text('Justify text so it fills window')
         formbar = gtk.Toolbar()
         formbar.set_style(gtk.TOOLBAR_ICONS)
@@ -637,6 +764,8 @@ class MainWindow(object):
         self.errTag = gtk.TextTag('error')
         self.errTag.set_property('underline', pango.UNDERLINE_ERROR)
         self.textTags.add(self.errTag)
+        self.ignoreTag = gtk.TextTag('ignore')
+        self.textTags.add(self.ignoreTag)
 
         notebook = gtk.Notebook()
         notebook.set_tab_pos(gtk.POS_TOP)
@@ -688,91 +817,6 @@ class MainWindow(object):
         gtk.main()
 
 
-
-class prefWindow(object):
-    def toggle(self, widget, data=None):
-        self.wantTemplate = "%s" % ((False, True)[widget.get_active()])
-        #if self.wantTemplate == True:
-        #    self.headerView.set_sensitive(True)
-        #    self.footerView.set_sensitive(True)
-        #else:
-        #    self.headerView.set_sensitive(False)
-        #    self.footerView.set_sensitive(False)
-
-
-    def savePrefs(self, widget, data=None):
-        confFile = open(os.path.join(os.path.expanduser('~'), '.smartte.conf'), 'wb')
-        print self.wantTemplate
-        if self.wantTemplate == True:
-            confFile.write("customTemplate = " + self.wantTemplate + "\ncustomHeader = '" + self.headerBuffer.get_text() + "'\ncustomFooter = '" + self.footerBuffer.get_text() + "'\nconvLanguage = 'bbcode'")
-        else:
-            confFile.write("customTemplate = False\ncustomHeader = None\ncustomFooter = None\nconvLanguage = 'bbcode'")
-        confFile.close()
-        self.prefWindow.destroy()
-
-
-    def __init__(self):
-        self.prefWindow = gtk.Window()
-        self.prefWindow.set_border_width(3)
-        self.prefWindow.set_resizable(True)
-        self.prefWindow.set_default_size(200,150)
-        self.prefWindow.set_title("SmartTE Preferences")
-
-        self.toggleTemplate = gtk.CheckButton('Enable Custom Template?')
-        self.toggleTemplate.connect('clicked', self.toggle)
-
-        self.headerLabel = gtk.Label('Header:')
-        self.headerView = gtk.TextView()
-        self.headerBuffer = self.headerView.get_buffer()
-        self.headerScroll = gtk.ScrolledWindow(None, None)
-        self.headerScroll.add(self.headerView)
-        self.headerScroll.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-
-        self.footerLabel = gtk.Label('Footer:')
-        self.footerView = gtk.TextView()
-        self.footerBuffer = self.footerView.get_buffer()
-        self.footerScroll = gtk.ScrolledWindow(None, None)
-        self.footerScroll.add(self.footerView)
-        self.footerScroll.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-
-        self.okButton = gtk.Button('Ok')
-        self.okButton.connect('clicked', self.savePrefs)
-
-        self.cancelButton = gtk.Button('Cancel')
-        self.cancelButton.connect('clicked', self.cancel)
-
-        self.buttonHBox = gtk.HBox(False, 0)
-        self.buttonHBox.add(self.cancelButton)
-        self.buttonHBox.add(self.okButton)
-        self.buttonAlign = gtk.Alignment(1, 0, 0, 0)
-        self.buttonAlign.add(self.buttonHBox)
-
-        self.table = gtk.Table(2, 2, True)
-        self.table.attach(self.headerLabel, 0, 1, 0, 1)
-        self.table.attach(self.headerScroll, 1, 2, 0, 1)
-        self.table.attach(self.footerLabel, 0, 1, 1, 2)
-        self.table.attach(self.footerScroll, 1, 2, 1, 2)
-
-        self.vbox = gtk.VBox(False, 0)
-        self.vbox.add(self.toggleTemplate)
-        self.vbox.add(self.table)
-        self.vbox.add(self.buttonAlign)
-        self.prefWindow.add(self.vbox)
-        self.prefWindow.show_all()
-
-
-    def cancel(self, widget, data=None):
-        self.prefWindow.destroy()
-        gtk.main_quit()
-
-    def delete_event(self, widget, event, data=None):
-        return False
-
-    def destroy(self, widget, data=None):
-        gtk.main_quit()
-
-    def main(self):
-        gtk.main()
 
 if __name__ == '__main__':
     try: sys.argv[1]
