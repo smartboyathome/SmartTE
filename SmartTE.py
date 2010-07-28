@@ -90,9 +90,7 @@ class MainWindow(object):
         docText = self.textConvertTo()
         tmpSettings = copy.deepcopy(self.docSettings)
         tmpSettings['ignoreList'] = []
-        if not tmpSettings['saveIgnore']:
-            tmpSettings['ignoreAllList'] = []
-        else:
+        if tmpSettings['saveIgnore']:
             tmpIter = self.textBuffer.get_start_iter()
             if tmpIter.begins_tag(self.ignoreTag):
                 beginIter = self.textBuffer.get_iter_at_offset(tmpIter.get_offset())
@@ -119,9 +117,9 @@ class MainWindow(object):
     def saveAsFile(self, widget, data=None):
         fileSel =  gtk.FileChooserDialog(title='Save File', action=gtk.FILE_CHOOSER_ACTION_SAVE, buttons=(gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL, gtk.STOCK_SAVE, gtk.RESPONSE_OK))
         self.genFileFilters(fileSel)
-        saveIgnore = gtk.CheckButton('Save Ignore and IgnoreAll lists with file?')
+        saveIgnore = gtk.CheckButton('Save Ignore list with file?')
         saveIgnore.set_active(True)
-        saveIgnore.set_tooltip_text('If you choose not to save these lists, then you will have to remark them again when you open up the file again.')
+        saveIgnore.set_tooltip_text('If you choose not to save the list, then you will have to remark them again when you reopen the file.')
         saveIgnore.show()
         fileSel.set_extra_widget(saveIgnore)
         response = fileSel.run()
@@ -355,7 +353,7 @@ class MainWindow(object):
             beginWord.backward_word_start()
             endWord.backward_word_start()
             endWord.forward_word_end()
-            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord))and not beginWord.has_tag(self.ignoreTag) and not self.textBuffer.get_text(beginWord, endWord) in self.docSettings['ignoreAllList']:
+            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord))and not beginWord.has_tag(self.ignoreTag):
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
             else:
                 self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
@@ -380,7 +378,7 @@ class MainWindow(object):
         while endWord.forward_word_end():
             beginWord.forward_word_ends(2)
             beginWord.backward_word_start()
-            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)) and not beginWord.has_tag(self.ignoreTag) and not self.textBuffer.get_text(beginWord, endWord) in self.docSettings['ignoreAllList']:
+            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)) and not beginWord.has_tag(self.ignoreTag):
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
 
 
@@ -490,7 +488,7 @@ class MainWindow(object):
                 elif beginWord.inside_word():
                     endWord.forward_word_end()
                     beginWord.backward_word_start()
-            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)) and not beginWord.has_tag(self.ignoreTag) and not self.textBuffer.get_text(beginWord, endWord) in self.docSettings['ignoreAllList']:
+            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)) and not beginWord.has_tag(self.ignoreTag):
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
             else:
                 self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
@@ -534,10 +532,6 @@ class MainWindow(object):
             ignoreItem.connect('activate', self.ignoreWord, beginWord, endWord)
             ignoreItem.set_tooltip_text('Ignores this instance')
             suggestMenu.add(ignoreItem)
-            ignoreAllItem = gtk.MenuItem(label='Add to ignore all list')
-            ignoreAllItem.connect('activate', self.ignoreAllWords, beginWord, endWord)
-            ignoreAllItem.set_tooltip_text('Ignores all instances')
-            suggestMenu.add(ignoreAllItem)
             docDictItem = gtk.MenuItem(label='Add to document dictionary')
             docDictItem.connect('activate', self.docDict, 'add', word, beginWord, endWord)
             suggestMenu.add(docDictItem)
@@ -550,11 +544,6 @@ class MainWindow(object):
         if curIter.has_tag(self.ignoreTag):
             item = gtk.MenuItem(label='Remove from ignore list')
             item.connect('activate', self.unIgnoreWord, beginWord, endWord)
-            item.show()
-            menu.insert(item, 0)
-        elif word in self.docSettings['ignoreAllList']:
-            item = gtk.MenuItem(label='Remove from ignore all list')
-            item.connect('activate', self.unIgnoreAllWords, word, beginWord, endWord)
             item.show()
             menu.insert(item, 0)
         elif word in self.docSettings['docDict']:
@@ -592,76 +581,6 @@ class MainWindow(object):
         self.textBuffer.remove_tag_by_name('ignore', beginWord, endWord)
         self.typed = True
         self.dectForm(beginWord=beginWord, endWord=endWord)
-
-
-    def ignoreAllWords(self, item, beginWord, endWord):
-        self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
-        text = self.textBuffer.get_text(beginWord, endWord)
-        origEnd = endWord.get_offset()
-        curStart = self.textBuffer.get_iter_at_offset(beginWord.get_offset())
-        if curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
-            curStart, curEnd = curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
-            keepGoing = True
-        else:
-            keepGoing = False
-        while keepGoing:
-            if curStart.has_tag(self.errTag):
-                self.textBuffer.remove_tag_by_name('error', curStart, curEnd)
-            if curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
-                curStart, curEnd = curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
-                keepGoing = True
-            else:
-                keepGoing = False
-        curEnd = self.textBuffer.get_iter_at_offset(origEnd)
-        if curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
-            curStart, curEnd = curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
-            keepGoing = True
-        else:
-            keepGoing = False
-        while keepGoing:
-            if curStart.has_tag(self.errTag):
-                self.textBuffer.remove_tag_by_name('error', curStart, curEnd)
-            if curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
-                curStart, curEnd = curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
-                keepGoing = True
-            else:
-                keepGoing = False
-        self.docSettings['ignoreAllList'].append(self.textBuffer.get_text(beginWord, endWord))
-
-
-    def unIgnoreAllWords(self, item, word, beginWord, endWord):
-        self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
-        text = self.textBuffer.get_text(beginWord, endWord)
-        origEnd = endWord.get_offset()
-        curStart = self.textBuffer.get_iter_at_offset(beginWord.get_offset())
-        if curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
-            curStart, curEnd = curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
-            keepGoing = True
-        else:
-            keepGoing = False
-        while keepGoing:
-            if not curStart.has_tag(self.errTag):
-                self.textBuffer.apply_tag_by_name('error', curStart, curEnd)
-            if curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
-                curStart, curEnd = curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
-                keepGoing = True
-            else:
-                keepGoing = False
-        curEnd = self.textBuffer.get_iter_at_offset(origEnd)
-        if curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
-            curStart, curEnd = curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
-            keepGoing = True
-        else:
-            keepGoing = False
-        while keepGoing:
-            if not curStart.has_tag(self.errTag):
-                self.textBuffer.apply_tag_by_name('error', curStart, curEnd)
-            if curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
-                curStart, curEnd = curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
-                keepGoing = True
-            else:
-                keepGoing = False
-        self.docSettings['ignoreAllList'].remove(word)
 
 
     def docDict(self, item, command, word=None, beginWord=None, endWord=None):
@@ -867,7 +786,7 @@ class MainWindow(object):
         self.dict = enchant.Dict()
         self.globalDict(command='init')
         self.typed = False
-        self.docSettings = {'justStyle':'left', 'saveIgnore':True, 'ignoreAllList':[], 'docDict':[]}
+        self.docSettings = {'justStyle':'left', 'saveIgnore':True, 'docDict':[]}
 
         newButton = gtk.ToolButton(gtk.STOCK_NEW)
         newButton.connect('clicked', self.newFile)
