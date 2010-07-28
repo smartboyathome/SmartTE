@@ -357,8 +357,15 @@ class MainWindow(object):
             endWord.forward_word_end()
             if not self.dict.check(self.textBuffer.get_text(beginWord, endWord))and not beginWord.has_tag(self.ignoreTag) and not self.textBuffer.get_text(beginWord, endWord) in self.docSettings['ignoreAllList']:
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+            else:
+                self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
         elif not self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).is_end():
             self.typed = True
+
+
+    def backspaceEvent(self, event):
+        self.saveCurPos()
+        self.typed = True
 
 
     def openCheckSpelling(self):
@@ -440,7 +447,7 @@ class MainWindow(object):
                     del(self.undlEnd)
 
 
-    def dectForm(self, widget=None, event=None, beginWord=None, endWord=None):
+    def dectForm(self, widget=None, event=None, tmpVar=None, tmpVar2=None, beginWord=None, endWord=None):
         self.saveCurPos()
         curIter = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
         curIter.backward_char()
@@ -485,6 +492,8 @@ class MainWindow(object):
                     beginWord.backward_word_start()
             if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)) and not beginWord.has_tag(self.ignoreTag) and not self.textBuffer.get_text(beginWord, endWord) in self.docSettings['ignoreAllList']:
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+            else:
+                self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
             self.typed = False
 
 
@@ -530,7 +539,7 @@ class MainWindow(object):
             ignoreAllItem.set_tooltip_text('Ignores all instances')
             suggestMenu.add(ignoreAllItem)
             docDictItem = gtk.MenuItem(label='Add to document dictionary')
-            docDictItem.connect('activate', self.docDict, 'add', beginWord, endWord)
+            docDictItem.connect('activate', self.docDict, 'add', word, beginWord, endWord)
             suggestMenu.add(docDictItem)
             dictItem = gtk.MenuItem(label='Add to global dictionary')
             dictItem.connect('activate', self.globalDict, 'add', word, beginWord, endWord)
@@ -553,7 +562,7 @@ class MainWindow(object):
             item.connect('activate', self.docDict, 'remove', word, beginWord, endWord)
             item.show()
             menu.insert(item, 0)
-        elif self.globalDict('search', word):
+        elif self.globalDict(command='search', word=word):
             item = gtk.MenuItem(label='Remove from global dictionary')
             item.connect('activate', self.globalDict, 'remove', word, beginWord, endWord)
             item.show()
@@ -587,28 +596,146 @@ class MainWindow(object):
 
     def ignoreAllWords(self, item, beginWord, endWord):
         self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+        text = self.textBuffer.get_text(beginWord, endWord)
+        origEnd = endWord.get_offset()
+        curStart = self.textBuffer.get_iter_at_offset(beginWord.get_offset())
+        if curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+            curStart, curEnd = curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+            keepGoing = True
+        else:
+            keepGoing = False
+        while keepGoing:
+            if curStart.has_tag(self.errTag):
+                self.textBuffer.remove_tag_by_name('error', curStart, curEnd)
+            if curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                curStart, curEnd = curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                keepGoing = True
+            else:
+                keepGoing = False
+        curEnd = self.textBuffer.get_iter_at_offset(origEnd)
+        if curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+            curStart, curEnd = curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+            keepGoing = True
+        else:
+            keepGoing = False
+        while keepGoing:
+            if curStart.has_tag(self.errTag):
+                self.textBuffer.remove_tag_by_name('error', curStart, curEnd)
+            if curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                curStart, curEnd = curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                keepGoing = True
+            else:
+                keepGoing = False
         self.docSettings['ignoreAllList'].append(self.textBuffer.get_text(beginWord, endWord))
 
 
     def unIgnoreAllWords(self, item, word, beginWord, endWord):
+        self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+        text = self.textBuffer.get_text(beginWord, endWord)
+        origEnd = endWord.get_offset()
+        curStart = self.textBuffer.get_iter_at_offset(beginWord.get_offset())
+        if curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+            curStart, curEnd = curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+            keepGoing = True
+        else:
+            keepGoing = False
+        while keepGoing:
+            if not curStart.has_tag(self.errTag):
+                self.textBuffer.apply_tag_by_name('error', curStart, curEnd)
+            if curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                curStart, curEnd = curStart.backward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                keepGoing = True
+            else:
+                keepGoing = False
+        curEnd = self.textBuffer.get_iter_at_offset(origEnd)
+        if curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+            curStart, curEnd = curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+            keepGoing = True
+        else:
+            keepGoing = False
+        while keepGoing:
+            if not curStart.has_tag(self.errTag):
+                self.textBuffer.apply_tag_by_name('error', curStart, curEnd)
+            if curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                curStart, curEnd = curEnd.forward_search(text, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                keepGoing = True
+            else:
+                keepGoing = False
         self.docSettings['ignoreAllList'].remove(word)
-        self.typed = True
-        self.dectForm(beginWord=beginWord, endWord=endWord)
 
 
     def docDict(self, item, command, word=None, beginWord=None, endWord=None):
         if command == 'add':
-            if beginWord != None:
+            if beginWord != None and endWord != None:
                 self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+                origEnd = endWord.get_offset()
+                curStart = self.textBuffer.get_iter_at_offset(beginWord.get_offset())
+                if curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                    curStart, curEnd = curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                    keepGoing = True
+                else:
+                    keepGoing = False
+                while keepGoing:
+                    if curStart.has_tag(self.errTag):
+                        self.textBuffer.remove_tag_by_name('error', curStart, curEnd)
+                    if curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                        curStart, curEnd = curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                        keepGoing = True
+                    else:
+                        keepGoing = False
+                curEnd = self.textBuffer.get_iter_at_offset(origEnd)
+                if curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                    curStart, curEnd = curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                    keepGoing = True
+                else:
+                    keepGoing = False
+                while keepGoing:
+                    if curStart.has_tag(self.errTag):
+                        self.textBuffer.remove_tag_by_name('error', curStart, curEnd)
+                    if curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                        curStart, curEnd = curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                        keepGoing = True
+                    else:
+                        keepGoing = False
             self.dict.add(word)
             self.docSettings['docDict'].append(word)
         elif command == 'remove':
+            if beginWord != None and endWord != None:
+                self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+                origEnd = endWord.get_offset()
+                curStart = self.textBuffer.get_iter_at_offset(beginWord.get_offset())
+                if curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                    curStart, curEnd = curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                    keepGoing = True
+                else:
+                    keepGoing = False
+                while keepGoing:
+                    if curStart.has_tag(self.errTag):
+                        self.textBuffer.apply_tag_by_name('error', curStart, curEnd)
+                    if curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                        curStart, curEnd = curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                        keepGoing = True
+                    else:
+                        keepGoing = False
+                curEnd = self.textBuffer.get_iter_at_offset(origEnd)
+                if curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                    curStart, curEnd = curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                    keepGoing = True
+                else:
+                    keepGoing = False
+                while keepGoing:
+                    if curStart.has_tag(self.errTag):
+                        self.textBuffer.apply_tag_by_name('error', curStart, curEnd)
+                    if curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                        curStart, curEnd = curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                        keepGoing = True
+                    else:
+                        keepGoing = False
             self.docSettings['docDict'].remove(word)
-            self.typed = True
-            self.dectForm(beginWord=beginWord, endWord=endWord)
+            self.dict.remove(word)
 
 
-    def globalDict(self, command, word=None, beginWord=None, endWord=None):
+    def globalDict(self, event=None, command=None, word=None, beginWord=None, endWord=None):
         if command == 'init':
             self.dictFile = os.path.join(os.path.expanduser('~'), '.config', 'smartte', 'dict')
             if not os.path.exists(self.dictFile):
@@ -622,8 +749,37 @@ class MainWindow(object):
                     self.dict.add(line)
                 f.close()
         elif command == 'add':
-            if beginWord != None:
+            if beginWord != None and endWord != None:
                 self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+                origEnd = endWord.get_offset()
+                curStart = self.textBuffer.get_iter_at_offset(beginWord.get_offset())
+                if curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                    curStart, curEnd = curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                    keepGoing = True
+                else:
+                    keepGoing = False
+                while keepGoing:
+                    if curStart.has_tag(self.errTag):
+                        self.textBuffer.remove_tag_by_name('error', curStart, curEnd)
+                    if curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                        curStart, curEnd = curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                        keepGoing = True
+                    else:
+                        keepGoing = False
+                curEnd = self.textBuffer.get_iter_at_offset(origEnd)
+                if curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                    curStart, curEnd = curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                    keepGoing = True
+                else:
+                    keepGoing = False
+                while keepGoing:
+                    if curStart.has_tag(self.errTag):
+                        self.textBuffer.remove_tag_by_name('error', curStart, curEnd)
+                    if curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                        curStart, curEnd = curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                        keepGoing = True
+                    else:
+                        keepGoing = False
             f = open(self.dictFile, 'a')
             f.write('\n' + word)
             f.close()
@@ -638,17 +794,48 @@ class MainWindow(object):
             else:
                 return False
         elif command == 'remove':
-            f = open(self.dictFile, 'w')
+            if beginWord != None and endWord != None:
+                self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+                origEnd = endWord.get_offset()
+                curStart = self.textBuffer.get_iter_at_offset(beginWord.get_offset())
+                if curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                    curStart, curEnd = curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                    keepGoing = True
+                else:
+                    keepGoing = False
+                while keepGoing:
+                    if not curStart.has_tag(self.errTag):
+                        self.textBuffer.apply_tag_by_name('error', curStart, curEnd)
+                    if curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                        curStart, curEnd = curStart.backward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                        keepGoing = True
+                    else:
+                        keepGoing = False
+                curEnd = self.textBuffer.get_iter_at_offset(origEnd)
+                if curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                    curStart, curEnd = curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                    keepGoing = True
+                else:
+                    keepGoing = False
+                while keepGoing:
+                    if not curStart.has_tag(self.errTag):
+                        self.textBuffer.apply_tag_by_name('error', curStart, curEnd)
+                    if curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY) != None:
+                        curStart, curEnd = curEnd.forward_search(word, gtk.TEXT_SEARCH_VISIBLE_ONLY)
+                        keepGoing = True
+                    else:
+                        keepGoing = False
+            f = open(self.dictFile, 'r')
             tmpText = f.read()
+            f.close()
             tmpList = tmpText.split('\n')
             tmpList.remove(word)
             tmpText = tmpList[0]
             for word in tmpList[1:]:
                 tmpText = tmpText + '\n' + word
+            f = open(self.dictFile, 'w')
             f.write(tmpText)
             f.close()
-            self.typed = True
-            self.dectForm(beginWord=beginWord, endWord=endWord)
 
 
     def __init__(self):
@@ -673,11 +860,12 @@ class MainWindow(object):
         self.textView.connect('button-release-event', self.dectForm)
         self.textView.connect('populate-popup', self.spellSuggest)
         self.insertId = self.textBuffer.connect_after('insert-text', self.persistAttr)
+        self.textView.connect_after('backspace', self.backspaceEvent)
 
-        self.curPos = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
-        self.curOldPos = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
+        self.curPos = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()))
+        self.curOldPos = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()))
         self.dict = enchant.Dict()
-        self.globalDict('init')
+        self.globalDict(command='init')
         self.typed = False
         self.docSettings = {'justStyle':'left', 'saveIgnore':True, 'ignoreAllList':[], 'docDict':[]}
 
