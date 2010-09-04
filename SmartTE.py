@@ -353,6 +353,17 @@ class MainWindow(object):
             beginWord.backward_word_start()
             endWord.backward_word_start()
             endWord.forward_word_end()
+            tmpIter1 = beginWord.copy()
+            tmpIter1.backward_chars(2)
+            tmpStr = self.textBuffer.get_text(tmpIter1, beginWord)
+            if not tmpStr[0] == " " and tmpStr[1] == "'":
+                beginWord.backward_word_start()
+            else:
+                tmpIter1 = endWord.copy()
+                tmpIter1.forward_chars(2)
+                tmpStr = self.textBuffer.get_text(endWord, tmpIter1)
+                if tmpStr[0] == "'" and not tmpStr[1] == " ":
+                    endWord.forward_word_end()
             if not self.dict.check(self.textBuffer.get_text(beginWord, endWord))and not beginWord.has_tag(self.ignoreTag):
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
             else:
@@ -486,8 +497,19 @@ class MainWindow(object):
                 elif endWord.ends_word():
                     beginWord.backward_word_start()
                 elif beginWord.inside_word():
-                    endWord.forward_word_end()
                     beginWord.backward_word_start()
+                    endWord.forward_word_end()
+                tmpIter1 = beginWord.copy()
+                tmpIter1.backward_chars(2)
+                tmpStr = self.textBuffer.get_text(tmpIter1, beginWord)
+                if not tmpStr[0] == " " and tmpStr[1] == "'":
+                    beginWord.backward_word_start()
+                else:
+                    tmpIter1 = endWord.copy()
+                    tmpIter1.forward_chars(2)
+                    tmpStr = self.textBuffer.get_text(endWord, tmpIter1)
+                    if tmpStr[0] == "'" and not tmpStr[1] == " ":
+                        endWord.forward_word_end()
             if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)) and not beginWord.has_tag(self.ignoreTag):
                 self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
             else:
@@ -519,6 +541,17 @@ class MainWindow(object):
             elif beginWord.inside_word():
                 endWord.forward_word_end()
                 beginWord.backward_word_start()
+            tmpIter1 = beginWord.copy()
+            tmpIter1.backward_chars(2)
+            tmpStr = self.textBuffer.get_text(tmpIter1, beginWord)
+            if not tmpStr[0] == " " and tmpStr[1] == "'":
+                beginWord.backward_word_start()
+            else:
+                tmpIter1 = endWord.copy()
+                tmpIter1.forward_chars(2)
+                tmpStr = self.textBuffer.get_text(endWord, tmpIter1)
+                if tmpStr[0] == "'" and not tmpStr[1] == " ":
+                    endWord.forward_word_end()
             suggestions = self.dict.suggest(word)
             suggestItem = gtk.MenuItem(label='Spelling Suggestions')
             suggestMenu = gtk.Menu()
@@ -788,6 +821,21 @@ class MainWindow(object):
         self.typed = False
         self.docSettings = {'justStyle':'left', 'saveIgnore':True, 'docDict':[]}
 
+        self.boldTag = gtk.TextTag('bold')
+        self.boldTag.set_property('weight', pango.WEIGHT_BOLD)
+        self.textTags.add(self.boldTag)
+        self.italTag = gtk.TextTag('italic')
+        self.italTag.set_property('style', pango.STYLE_ITALIC)
+        self.textTags.add(self.italTag)
+        self.undlTag = gtk.TextTag('underline')
+        self.undlTag.set_property('underline', pango.UNDERLINE_SINGLE)
+        self.textTags.add(self.undlTag)
+        self.errTag = gtk.TextTag('error')
+        self.errTag.set_property('underline', pango.UNDERLINE_ERROR)
+        self.textTags.add(self.errTag)
+        self.ignoreTag = gtk.TextTag('ignore')
+        self.textTags.add(self.ignoreTag)
+
         newButton = gtk.ToolButton(gtk.STOCK_NEW)
         newButton.connect('clicked', self.newFile)
         newButton.set_tooltip_text('Create new file')
@@ -858,21 +906,6 @@ class MainWindow(object):
         formbar.insert(self.justRightButton, 6)
         formbar.insert(self.justFillButton, 7)
         formLabel = gtk.Label('Format')
-
-        self.boldTag = gtk.TextTag('bold')
-        self.boldTag.set_property('weight', pango.WEIGHT_BOLD)
-        self.textTags.add(self.boldTag)
-        self.italTag = gtk.TextTag('italic')
-        self.italTag.set_property('style', pango.STYLE_ITALIC)
-        self.textTags.add(self.italTag)
-        self.undlTag = gtk.TextTag('underline')
-        self.undlTag.set_property('underline', pango.UNDERLINE_SINGLE)
-        self.textTags.add(self.undlTag)
-        self.errTag = gtk.TextTag('error')
-        self.errTag.set_property('underline', pango.UNDERLINE_ERROR)
-        self.textTags.add(self.errTag)
-        self.ignoreTag = gtk.TextTag('ignore')
-        self.textTags.add(self.ignoreTag)
 
         notebook = gtk.Notebook()
         notebook.set_tab_pos(gtk.POS_TOP)
