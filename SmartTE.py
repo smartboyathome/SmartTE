@@ -77,6 +77,14 @@ class MainWindow(object):
             del(self.docSettings['ignoreList'])
             for word in self.docSettings['docDict']:
                 self.dict.add(word)
+            if self.docSettings['justStyle'] == 'left':
+                self.justLeftButton.set_active(True)
+            elif self.docSettings['justStyle'] == 'center':
+                self.justCenterButton.set_active(True)
+            elif self.docSettings['justStyle'] == 'right':
+                self.justRightButton.set_active(True)
+            elif self.docSettings['justStyle'] == 'fill':
+                self.justFillButton.set_active(True)
         else:
             fileData = tmpFileData
             self.textConvertFrom(fileData)
@@ -356,18 +364,38 @@ class MainWindow(object):
             tmpIter1 = beginWord.copy()
             tmpIter1.backward_chars(2)
             tmpStr = self.textBuffer.get_text(tmpIter1, beginWord)
-            if not tmpStr[0] == " " and tmpStr[1] == "'":
-                beginWord.backward_word_start()
+            try: tmpStr[1]
+            except IndexError: pass
             else:
+                if re.match(r'[a-zA-Z]', tmpStr[0]) and tmpStr[1] == "'":
+                    beginWord.backward_word_start()
+                else:
+                    tmpIter1 = endWord.copy()
+                    tmpIter1.forward_chars(2)
+                    tmpStr = self.textBuffer.get_text(endWord, tmpIter1)
+                    if tmpStr[0] == "'" and re.match(r'[a-zA-Z]', tmpStr[1]):
+                        endWord.forward_word_end()
+            word = self.textBuffer.get_text(beginWord, endWord)
+            try: int(word)
+            except ValueError:
+                if not self.dict.check(word) and not beginWord.has_tag(self.ignoreTag):
+                    self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+                else:
+                    self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+            if endWord.get_char() == ' ' and endWord.has_tag(self.errTag):
                 tmpIter1 = endWord.copy()
-                tmpIter1.forward_chars(2)
-                tmpStr = self.textBuffer.get_text(endWord, tmpIter1)
-                if tmpStr[0] == "'" and not tmpStr[1] == " ":
-                    endWord.forward_word_end()
-            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord))and not beginWord.has_tag(self.ignoreTag):
-                self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
-            else:
-                self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+                tmpIter1.forward_char()
+                self.textBuffer.remove_tag_by_name('error', endWord, tmpIter1)
+                if tmpIter1.starts_word():
+                    tmpIter2 = tmpIter1.copy()
+                    tmpIter2.forward_word_end()
+                    word = self.textBuffer.get_text(tmpIter1, tmpIter2)
+                    try: int(word)
+                    except ValueError:
+                        if not self.dict.check(word)and not beginWord.has_tag(self.ignoreTag):
+                            self.textBuffer.apply_tag_by_name('error', tmpIter1, tmpIter2)
+                        else:
+                            self.textBuffer.remove_tag_by_name('error', tmpIter1, tmpIter2)
         elif not self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()).is_end():
             self.typed = True
 
@@ -502,18 +530,27 @@ class MainWindow(object):
                 tmpIter1 = beginWord.copy()
                 tmpIter1.backward_chars(2)
                 tmpStr = self.textBuffer.get_text(tmpIter1, beginWord)
-                if not tmpStr[0] == " " and tmpStr[1] == "'":
+                if re.match(r'[a-zA-Z]', tmpStr[0]) and tmpStr[1] == "'":
                     beginWord.backward_word_start()
                 else:
                     tmpIter1 = endWord.copy()
                     tmpIter1.forward_chars(2)
                     tmpStr = self.textBuffer.get_text(endWord, tmpIter1)
-                    if tmpStr[0] == "'" and not tmpStr[1] == " ":
-                        endWord.forward_word_end()
-            if not self.dict.check(self.textBuffer.get_text(beginWord, endWord)) and not beginWord.has_tag(self.ignoreTag):
-                self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+                    try: tmpStr[1]
+                    except IndexError: pass
+                    else:
+                        if tmpStr[0] == "'" and re.match(r'[a-zA-Z]', tmpStr[1]):
+                            endWord.forward_word_end()
+            word = self.textBuffer.get_text(beginWord, endWord)
+            try: word[0]
+            except IndexError: pass
             else:
-                self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
+                try: int(word)
+                except ValueError:
+                    if not self.dict.check(word) and not beginWord.has_tag(self.ignoreTag):
+                        self.textBuffer.apply_tag_by_name('error', beginWord, endWord)
+                    else:
+                        self.textBuffer.remove_tag_by_name('error', beginWord, endWord)
             self.typed = False
 
 
