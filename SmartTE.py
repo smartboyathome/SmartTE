@@ -328,7 +328,7 @@ class MainWindow(object):
             except ValueError:
                 self.sizes[size].set_property('size-points', int(size[:-2]))
             else:
-                self.sizes[size].set_property('scale', self.pangoSizes[int(size)])
+                self.sizes[size].set_property('scale', pango.SCALE_LARGE**(int(size)-4))
             self.textTags.add(self.sizes[size])
             return self.sizes[size]
         else:
@@ -383,6 +383,13 @@ class MainWindow(object):
             pass
         else:
             self.textBuffer.apply_tag_by_name('underline', self.textBuffer.get_iter_at_mark(self.undlStart), self.textBuffer.get_iter_at_mark(self.undlEnd))
+        try: self.sizeStart
+        except AttributeError:
+            pass
+        else:
+            if self.sizeTypeBox.get_active_text() == 'px':
+                sizeType = 'px'
+            self.textBuffer.apply_tag(self.genSizeTag(self.textSizeEntry.get_active_text()+sizeType), self.textBuffer.get_iter_at_mark(self.sizeStart), self.textBuffer.get_iter_at_mark(self.sizeEnd))
         if text == ' ':
             beginWord = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
             endWord = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
@@ -855,6 +862,36 @@ class MainWindow(object):
             f.close()
 
 
+    def changeSizeEntry(self, combobox):
+        model = self.textSizeEntry.get_model()
+        model.clear()
+        self.textSizeEntry.set_model(model)
+        if combobox.get_active_text() == 'px':
+            sizes = self.defPixelSizes
+        else:
+            sizes = self.defScaleSizes
+        for size in sizes:
+            self.textSizeEntry.append_text(str(size))
+        self.textSizeEntry.set_active(0)
+
+
+    def changeSize(self, combobox):
+        if self.sizeTypeBox.get_active_text() == 'px':
+            if self.textBuffer.get_selection_bounds() != ():
+                start, end = self.textBuffer.get_selection_bounds()
+                self.textBuffer.apply_tag(self.genSizeTag(combobox.get_active_text()+'px'), start, end)
+            else:
+                self.sizeStart = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), True)
+                self.sizeEnd = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), False)
+        else:
+            if self.textBuffer.get_selection_bounds() != ():
+                start, end = self.textBuffer.get_selection_bounds()
+                self.textBuffer.apply_tag(self.genSizeTag(combobox.get_active_text()), start, end)
+            else:
+                self.sizeStart = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), True)
+                self.sizeEnd = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), False)
+
+
     def __init__(self):
         self.window = gtk.Window()
         self.window.set_border_width(0)
@@ -886,7 +923,8 @@ class MainWindow(object):
         self.typed = False
         self.docSettings = {'justStyle':'left', 'saveIgnore':True, 'docDict':[]}
         self.sizes = {}
-        self.pangoSizes = [pango.SCALE_XX_SMALL, pango.SCALE_X_SMALL, pango.SCALE_SMALL, pango.SCALE_MEDIUM, pango.SCALE_LARGE, pango.SCALE_X_LARGE, pango.SCALE_XX_LARGE]
+        self.defPixelSizes = [9,10,12,14,16,20,24,32,40,48,60,72]
+        self.defScaleSizes = [1,2,3,4,5,6,7]
 
         self.boldTag = gtk.TextTag('bold')
         self.boldTag.set_property('weight', pango.WEIGHT_BOLD)
@@ -929,14 +967,14 @@ class MainWindow(object):
         quitButton.set_tooltip_text('Quit SmartTE')
         filebar = gtk.Toolbar()
         filebar.set_style(gtk.TOOLBAR_ICONS)
-        filebar.insert(newButton, 0)
-        filebar.insert(openButton, 1)
-        filebar.insert(saveButton, 2)
-        filebar.insert(saveAsButton, 3)
-        filebar.insert(copyButton, 4)
-        filebar.insert(undoButton, 5)
-        filebar.insert(redoButton, 6)
-        filebar.insert(quitButton, 7)
+        filebar.insert(newButton, -1)
+        filebar.insert(openButton, -1)
+        filebar.insert(saveButton, -1)
+        filebar.insert(saveAsButton, -1)
+        filebar.insert(copyButton, -1)
+        filebar.insert(undoButton, -1)
+        filebar.insert(redoButton, -1)
+        filebar.insert(quitButton, -1)
         fileLabel = gtk.Label('File')
 
         self.boldButton = gtk.ToggleToolButton(gtk.STOCK_BOLD)
@@ -949,7 +987,36 @@ class MainWindow(object):
         self.undlHandId = self.undlButton.connect('toggled', self.undlText)
         self.undlButton.set_tooltip_text('Underline selected text')
         sep1 = gtk.SeparatorToolItem()
-        sep1.set_tooltip_text('I\'m just a lonely, little separator. :\'(')
+        self.textSizeEntry = gtk.combo_box_entry_new_text()
+        self.textSizeEntry.set_size_request(60, -1)
+        try: self.defPixelSizes.index(self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE)
+        except ValueError:
+            self.defPixelSizes.append(self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE)
+            self.defPixelSizes = sorted(self.defPixelSizes)
+            index = self.defPixelSizes.index(self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE)
+        else:
+            index = self.defPixelSizes.index(self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE)
+        for size in self.defPixelSizes:
+            self.textSizeEntry.append_text(str(size))
+        self.textSizeEntry.set_active(index)
+        self.textSizeEntry.child.connect('changed', self.changeSize)
+        self.textSizeAlign = gtk.Alignment()
+        self.textSizeAlign.set_padding(5, 5, 0, 0)
+        self.textSizeAlign.add(self.textSizeEntry)
+        self.textSizeItem = gtk.ToolItem()
+        self.textSizeItem.add(self.textSizeAlign)
+        self.sizeTypeBox = gtk.combo_box_new_text()
+        self.sizeTypeBox.set_size_request(50, -1)
+        self.sizeTypeBox.append_text('px')
+        self.sizeTypeBox.append_text('pt')
+        self.sizeTypeBox.set_active(0)
+        self.sizeTypeBox.connect('changed', self.changeSizeEntry)
+        self.sizeTypeAlign = gtk.Alignment()
+        self.sizeTypeAlign.set_padding(5, 5, 0, 0)
+        self.sizeTypeAlign.add(self.sizeTypeBox)
+        self.sizeTypeItem = gtk.ToolItem()
+        self.sizeTypeItem.add(self.sizeTypeAlign)
+        sep2 = gtk.SeparatorToolItem()
         self.justLeftButton = gtk.RadioToolButton(None, gtk.STOCK_JUSTIFY_LEFT)
         self.leftId = self.justLeftButton.connect('toggled', self.changeJust)
         self.justLeftButton.set_tooltip_text('Justify text to the left')
@@ -964,14 +1031,17 @@ class MainWindow(object):
         self.justFillButton.set_tooltip_text('Justify text so it fills window')
         formbar = gtk.Toolbar()
         formbar.set_style(gtk.TOOLBAR_ICONS)
-        formbar.insert(self.boldButton, 0)
-        formbar.insert(self.italButton, 1)
-        formbar.insert(self.undlButton, 2)
-        formbar.insert(sep1, 3)
-        formbar.insert(self.justLeftButton, 4)
-        formbar.insert(self.justCenterButton, 5)
-        formbar.insert(self.justRightButton, 6)
-        formbar.insert(self.justFillButton, 7)
+        formbar.insert(self.boldButton, -1)
+        formbar.insert(self.italButton, -1)
+        formbar.insert(self.undlButton, -1)
+        formbar.insert(sep1, -1)
+        formbar.insert(self.textSizeItem, -1)
+        formbar.insert(self.sizeTypeItem, -1)
+        formbar.insert(sep2, -1)
+        formbar.insert(self.justLeftButton, -1)
+        formbar.insert(self.justCenterButton, -1)
+        formbar.insert(self.justRightButton, -1)
+        formbar.insert(self.justFillButton, -1)
         formLabel = gtk.Label('Format')
 
         notebook = gtk.Notebook()
