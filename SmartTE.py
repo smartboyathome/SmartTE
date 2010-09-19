@@ -273,6 +273,9 @@ class MainWindow(object):
         italEnds = []
         undlStarts = []
         undlEnds = []
+        sizeStarts = []
+        sizeEnds = []
+        sizeNum = []
         while tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()).find('[/u]') > -1:
             tmpPos = tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()).find('[u]')
             undlStarts.append(tmpBuffer.create_mark(None, tmpBuffer.get_iter_at_offset(tmpPos), True))
@@ -294,17 +297,42 @@ class MainWindow(object):
             tmpPos = tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()).find('[/b]')
             boldEnds.append(tmpBuffer.create_mark(None, tmpBuffer.get_iter_at_offset(tmpPos), True))
             tmpBuffer.delete(tmpBuffer.get_iter_at_offset(tmpPos), tmpBuffer.get_iter_at_offset(tmpPos+4))
+        while tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()).find('[/size]') > -1:
+            match = re.search(r'\[size=(\d+(px)?)\]', tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()))
+            sizeStarts.append(tmpBuffer.create_mark(None, tmpBuffer.get_iter_at_offset(match.start()), True))
+            sizeNum.append(match.group(1))
+            tmpBuffer.delete(tmpBuffer.get_iter_at_offset(match.start()), tmpBuffer.get_iter_at_offset(match.end()))
+            match = re.search(r'\[/size\]', tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()))
+            sizeEnds.append(tmpBuffer.create_mark(None, tmpBuffer.get_iter_at_offset(match.start()), True))
+            tmpBuffer.delete(tmpBuffer.get_iter_at_offset(match.start()), tmpBuffer.get_iter_at_offset(match.end()))
         for start, end in zip(boldStarts, boldEnds):
             tmpBuffer.apply_tag_by_name('bold', tmpBuffer.get_iter_at_mark(start), tmpBuffer.get_iter_at_mark(end))
         for start, end in zip(italStarts, italEnds):
             tmpBuffer.apply_tag_by_name('italic', tmpBuffer.get_iter_at_mark(start), tmpBuffer.get_iter_at_mark(end))
         for start, end in zip(undlStarts, undlEnds):
             tmpBuffer.apply_tag_by_name('underline', tmpBuffer.get_iter_at_mark(start), tmpBuffer.get_iter_at_mark(end))
+        for start, end, num in zip(sizeStarts, sizeEnds, sizeNum):
+            tmpBuffer.apply_tag(self.genSizeTag(num), tmpBuffer.get_iter_at_mark(start), tmpBuffer.get_iter_at_mark(end))
         self.textBuffer.set_text('')
         deserialization = self.textBuffer.register_deserialize_tagset()
         self.textBuffer.handler_block(self.insertId)
         self.textBuffer.deserialize(self.textBuffer, deserialization, self.textBuffer.get_start_iter(), tmpBuffer.serialize(tmpBuffer, "application/x-gtk-text-buffer-rich-text", tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()))
         self.textBuffer.handler_unblock(self.insertId)
+
+
+    def genSizeTag(self, size):
+        try: self.sizes[size]
+        except KeyError:
+            self.sizes[size] = gtk.TextTag('size'+size)
+            try: int(size)
+            except ValueError:
+                self.sizes[size].set_property('size-points', int(size[:-2]))
+            else:
+                self.sizes[size].set_property('scale', self.pangoSizes[int(size)])
+            self.textTags.add(self.sizes[size])
+            return self.sizes[size]
+        else:
+            return self.sizes[size]
 
 
     def changeJust(self, widget, data=None):
@@ -857,6 +885,8 @@ class MainWindow(object):
         self.globalDict(command='init')
         self.typed = False
         self.docSettings = {'justStyle':'left', 'saveIgnore':True, 'docDict':[]}
+        self.sizes = {}
+        self.pangoSizes = [pango.SCALE_XX_SMALL, pango.SCALE_X_SMALL, pango.SCALE_SMALL, pango.SCALE_MEDIUM, pango.SCALE_LARGE, pango.SCALE_X_LARGE, pango.SCALE_XX_LARGE]
 
         self.boldTag = gtk.TextTag('bold')
         self.boldTag.set_property('weight', pango.WEIGHT_BOLD)
