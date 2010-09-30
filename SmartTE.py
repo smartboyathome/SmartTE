@@ -251,6 +251,19 @@ class MainWindow(object):
             if iter.ends_tag(self.undlTag) and self.undlLock:
                 self.tmpBuffer.insert(iter, '[/u]')
                 self.undlLock = False
+            for tagName in self.sizes:
+                tag = self.sizes[tagName]
+                iter = self.tmpBuffer.get_iter_at_mark(self.beginMark)
+                if iter.begins_tag(tag) and not self.sizeLock[tagName]:
+                    self.sizeLock[tagName] = True
+                    if tag.get_property('size-set'):
+                        self.tmpBuffer.insert(iter, '[size='+str(int(tag.get_property('size-points')))+'px]')
+                    elif tag.get_property('scale-set'):
+                        self.tmpBuffer.insert(iter, '[size='+str(int(tag.get_property('scale')))+']')
+                iter = self.tmpBuffer.get_iter_at_mark(self.endMark)
+                if iter.ends_tag(tag) and self.sizeLock[tagName]:
+                    self.sizeLock[tagName] = False
+                    self.tmpBuffer.insert(iter, '[/size]')
         self.tmpBuffer = gtk.TextBuffer(self.textTags)
         selStart, selEnd = self.textBuffer.get_selection_bounds()
         selStart = selStart.get_offset()
@@ -264,6 +277,9 @@ class MainWindow(object):
         self.boldLock = False
         self.italLock = False
         self.undlLock = False
+        self.sizeLock = {}
+        for tagName in self.sizes:
+            self.sizeLock[tagName] = False
         self.beginMark = self.tmpBuffer.create_mark(None, self.tmpBuffer.get_start_iter(), False)
         self.endMark = self.tmpBuffer.create_mark(None, self.tmpBuffer.get_start_iter(), True)
         apply_tag(self)
@@ -942,6 +958,10 @@ class MainWindow(object):
                 self.sizeEnd = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), False)
 
 
+    def tabFocus(self, notebook, page, page_num):
+        self.textView.grab_focus()
+
+
     def __init__(self):
         self.window = gtk.Window()
         self.window.set_border_width(0)
@@ -1099,6 +1119,7 @@ class MainWindow(object):
         notebook.set_tab_pos(gtk.POS_TOP)
         notebook.append_page(filebar, fileLabel)
         notebook.append_page(formbar, formLabel)
+        notebook.connect_after('switch-page', self.tabFocus)
 
         statusbar = gtk.Statusbar()
         statusbar.set_has_resize_grip(False)
