@@ -523,34 +523,68 @@ class MainWindow(object):
         self.saveCurPos()
         curIter = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
         curIter.backward_char()
-        if curIter.has_tag(self.boldTag) and not self.boldButton.get_active():
+        curTags = curIter.get_tags()
+        bolded = False
+        underlined = False
+        italicized = False
+        sizeSet = False
+        size = self.defSize
+        sizeType = 'px'
+        for tag in curTags:
+            if tag.get_property('weight-set'):
+                bolded = True
+            elif tag.get_property('underline-set'):
+                underlined = True
+            elif tag.get_property('style-set'):
+                italicized = True
+            elif tag.get_property('size-set'):
+                sizeSet = True
+                size = tag.get_property('size-points')
+                sizeType = 'px'
+            elif tag.get_property('scale-set'):
+                sizeSet = True
+                size = tag.get_property('scale')
+                sizeType = 'pt'
+        if bolded and not self.boldButton.get_active():
             self.boldButton.handler_block(self.boldHandId)
             self.boldButton.set_active(True)
             self.boldButton.handler_unblock(self.boldHandId)
-        elif self.italButton.get_active() and not curIter.has_tag(self.boldTag):
+        elif not bolded and self.boldButton.get_active():
             self.boldButton.handler_block(self.boldHandId)
             self.boldButton.set_active(False)
             self.boldButton.handler_unblock(self.boldHandId)
-        curIter = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
-        curIter.backward_char()
-        if curIter.has_tag(self.italTag) and not self.italButton.get_active():
+        if italicized and not self.italButton.get_active():
             self.italButton.handler_block(self.italHandId)
             self.italButton.set_active(True)
             self.italButton.handler_unblock(self.italHandId)
-        elif self.italButton.get_active() and not curIter.has_tag(self.italTag):
+        elif not italicized and self.italButton.get_active():
             self.italButton.handler_block(self.italHandId)
             self.italButton.set_active(False)
             self.italButton.handler_unblock(self.italHandId)
-        curIter = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
-        curIter.backward_char()
-        if curIter.has_tag(self.undlTag) and not self.undlButton.get_active():
+        if underlined and not self.undlButton.get_active():
             self.undlButton.handler_block(self.undlHandId)
             self.undlButton.set_active(True)
             self.undlButton.handler_unblock(self.undlHandId)
-        elif self.undlButton.get_active() and not curIter.has_tag(self.undlTag):
+        elif not underlined and self.italButton.get_active():
             self.undlButton.handler_block(self.undlHandId)
             self.undlButton.set_active(False)
             self.undlButton.handler_unblock(self.undlHandId)
+        if sizeSet and not size == self.textSizeEntry.child.get_text():
+            if sizeType == 'px':
+                self.sizeTypeBox.set_active(0)
+                self.textSizeEntry.child.handler_block(self.textHandId)
+                self.textSizeEntry.child.set_text(str(int(size)))
+                self.textSizeEntry.child.handler_unblock(self.textHandId)
+            elif sizeType == 'pt':
+                self.sizeTypeBox.set_active(1)
+                self.textSizeEntry.child.handler_block(self.textHandId)
+                self.textSizeEntry.child.set_text(str(int(size)))
+                self.textSizeEntry.child.handler_unblock(self.textHandId)
+        elif not sizeSet and not size == self.textSizeEntry.child.get_text():
+            self.sizeTypeBox.set_active(0)
+            self.textSizeEntry.child.handler_block(self.textHandId)
+            self.textSizeEntry.child.set_text(str(int(size)))
+            self.textSizeEntry.child.handler_unblock(self.textHandId)
         if self.typed:
             if beginWord == None or endWord == None:
                 beginWord = self.textBuffer.get_iter_at_mark(self.curOldPos)
@@ -879,14 +913,14 @@ class MainWindow(object):
         if self.sizeTypeBox.get_active_text() == 'px':
             if self.textBuffer.get_selection_bounds() != ():
                 start, end = self.textBuffer.get_selection_bounds()
-                self.textBuffer.apply_tag(self.genSizeTag(combobox.get_active_text()+'px'), start, end)
+                self.textBuffer.apply_tag(self.genSizeTag(combobox.get_text()+'px'), start, end)
             else:
                 self.sizeStart = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), True)
                 self.sizeEnd = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), False)
         else:
             if self.textBuffer.get_selection_bounds() != ():
                 start, end = self.textBuffer.get_selection_bounds()
-                self.textBuffer.apply_tag(self.genSizeTag(combobox.get_active_text()), start, end)
+                self.textBuffer.apply_tag(self.genSizeTag(combobox.get_text()), start, end)
             else:
                 self.sizeStart = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), True)
                 self.sizeEnd = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), False)
@@ -989,17 +1023,18 @@ class MainWindow(object):
         sep1 = gtk.SeparatorToolItem()
         self.textSizeEntry = gtk.combo_box_entry_new_text()
         self.textSizeEntry.set_size_request(60, -1)
-        try: self.defPixelSizes.index(self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE)
+        self.defSize = self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE
+        try: self.defPixelSizes.index(self.defSize)
         except ValueError:
-            self.defPixelSizes.append(self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE)
+            self.defPixelSizes.append(self.defSize)
             self.defPixelSizes = sorted(self.defPixelSizes)
-            index = self.defPixelSizes.index(self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE)
+            index = self.defPixelSizes.index(self.defSize)
         else:
-            index = self.defPixelSizes.index(self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE)
+            index = self.defPixelSizes.index(self.defSize)
         for size in self.defPixelSizes:
             self.textSizeEntry.append_text(str(size))
         self.textSizeEntry.set_active(index)
-        self.textSizeEntry.child.connect('changed', self.changeSize)
+        self.textHandId = self.textSizeEntry.child.connect('changed', self.changeSize)
         self.textSizeAlign = gtk.Alignment()
         self.textSizeAlign.set_padding(5, 5, 0, 0)
         self.textSizeAlign.add(self.textSizeEntry)
