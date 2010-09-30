@@ -187,12 +187,28 @@ class MainWindow(object):
             if iter.ends_tag(self.undlTag) and self.undlLock:
                 self.tmpBuffer.insert(iter, '[/u]')
                 self.undlLock = False
+            for tagName in self.sizes:
+                tag = self.sizes[tagName]
+                iter = self.tmpBuffer.get_iter_at_mark(self.beginMark)
+                if iter.begins_tag(tag) and not self.sizeLock[tagName]:
+                    self.sizeLock[tagName] = True
+                    if tag.get_property('size-set'):
+                        self.tmpBuffer.insert(iter, '[size='+str(int(tag.get_property('size-points')))+'px]')
+                    elif tag.get_property('scale-set'):
+                        self.tmpBuffer.insert(iter, '[size='+str(int(tag.get_property('scale')))+']')
+                iter = self.tmpBuffer.get_iter_at_mark(self.endMark)
+                if iter.ends_tag(tag) and self.sizeLock[tagName]:
+                    self.sizeLock[tagName] = False
+                    self.tmpBuffer.insert(iter, '[/size]')
         self.tmpBuffer = gtk.TextBuffer(self.textTags)
         deserialization = self.tmpBuffer.register_deserialize_tagset()
         self.tmpBuffer.deserialize(self.tmpBuffer, deserialization, self.tmpBuffer.get_start_iter(), self.textBuffer.serialize(self.textBuffer, "application/x-gtk-text-buffer-rich-text", self.textBuffer.get_start_iter(), self.textBuffer.get_end_iter()))
         self.boldLock = False
         self.italLock = False
         self.undlLock = False
+        self.sizeLock = {}
+        for tagName in self.sizes:
+            self.sizeLock[tagName] = False
         self.beginMark = self.tmpBuffer.create_mark(None, self.tmpBuffer.get_start_iter(), False)
         self.endMark = self.tmpBuffer.create_mark(None, self.tmpBuffer.get_start_iter(), True)
         apply_tag(self)
