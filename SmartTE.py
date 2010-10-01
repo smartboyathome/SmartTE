@@ -200,6 +200,16 @@ class MainWindow(object):
                 if iter.ends_tag(tag) and self.sizeLock[tagName]:
                     self.sizeLock[tagName] = False
                     self.tmpBuffer.insert(iter, '[/size]')
+            for tagName in self.fonts:
+                tag = self.fonts[tagName]
+                iter = self.tmpBuffer.get_iter_at_mark(self.beginMark)
+                if iter.begins_tag(tag) and not self.fontLock[tagName]:
+                    self.fontLock[tagName] = True
+                    self.tmpBuffer.insert(iter, '[font='+tag.get_property('family')+']')
+                iter = self.tmpBuffer.get_iter_at_mark(self.endMark)
+                if iter.ends_tag(tag) and self.fontLock[tagName]:
+                    self.fontLock[tagName] = False
+                    self.tmpBuffer.insert(iter, '[/font]')
         self.tmpBuffer = gtk.TextBuffer(self.textTags)
         deserialization = self.tmpBuffer.register_deserialize_tagset()
         self.tmpBuffer.deserialize(self.tmpBuffer, deserialization, self.tmpBuffer.get_start_iter(), self.textBuffer.serialize(self.textBuffer, "application/x-gtk-text-buffer-rich-text", self.textBuffer.get_start_iter(), self.textBuffer.get_end_iter()))
@@ -209,6 +219,9 @@ class MainWindow(object):
         self.sizeLock = {}
         for tagName in self.sizes:
             self.sizeLock[tagName] = False
+        self.fontLock = {}
+        for tagName in self.fontList:
+            self.fontLock[tagName] = False
         self.beginMark = self.tmpBuffer.create_mark(None, self.tmpBuffer.get_start_iter(), False)
         self.endMark = self.tmpBuffer.create_mark(None, self.tmpBuffer.get_start_iter(), True)
         apply_tag(self)
@@ -308,6 +321,9 @@ class MainWindow(object):
         sizeStarts = []
         sizeEnds = []
         sizeNum = []
+        fontStarts = []
+        fontEnds = []
+        fontName = []
         while tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()).find('[/u]') > -1:
             tmpPos = tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()).find('[u]')
             undlStarts.append(tmpBuffer.create_mark(None, tmpBuffer.get_iter_at_offset(tmpPos), True))
@@ -337,6 +353,14 @@ class MainWindow(object):
             match = re.search(r'\[/size\]', tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()))
             sizeEnds.append(tmpBuffer.create_mark(None, tmpBuffer.get_iter_at_offset(match.start()), True))
             tmpBuffer.delete(tmpBuffer.get_iter_at_offset(match.start()), tmpBuffer.get_iter_at_offset(match.end()))
+        while tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()).find('[/font]') > -1:
+            match = re.search(r'\[font=(\w+(?:\s\w+)*)\]', tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()))
+            fontStarts.append(tmpBuffer.create_mark(None, tmpBuffer.get_iter_at_offset(match.start()), True))
+            fontName.append(match.group(1))
+            tmpBuffer.delete(tmpBuffer.get_iter_at_offset(match.start()), tmpBuffer.get_iter_at_offset(match.end()))
+            match = re.search(r'\[/font\]', tmpBuffer.get_text(tmpBuffer.get_start_iter(), tmpBuffer.get_end_iter()))
+            fontEnds.append(tmpBuffer.create_mark(None, tmpBuffer.get_iter_at_offset(match.start()), True))
+            tmpBuffer.delete(tmpBuffer.get_iter_at_offset(match.start()), tmpBuffer.get_iter_at_offset(match.end()))
         for start, end in zip(boldStarts, boldEnds):
             tmpBuffer.apply_tag_by_name('bold', tmpBuffer.get_iter_at_mark(start), tmpBuffer.get_iter_at_mark(end))
         for start, end in zip(italStarts, italEnds):
@@ -345,6 +369,8 @@ class MainWindow(object):
             tmpBuffer.apply_tag_by_name('underline', tmpBuffer.get_iter_at_mark(start), tmpBuffer.get_iter_at_mark(end))
         for start, end, num in zip(sizeStarts, sizeEnds, sizeNum):
             tmpBuffer.apply_tag(self.genSizeTag(num), tmpBuffer.get_iter_at_mark(start), tmpBuffer.get_iter_at_mark(end))
+        for start, end, name in zip(fontStarts, fontEnds, fontName):
+            tmpBuffer.apply_tag(self.genFontTag(name), tmpBuffer.get_iter_at_mark(start), tmpBuffer.get_iter_at_mark(end))
         self.textBuffer.set_text('')
         deserialization = self.textBuffer.register_deserialize_tagset()
         self.textBuffer.handler_block(self.insertId)
@@ -365,6 +391,17 @@ class MainWindow(object):
             return self.sizes[size]
         else:
             return self.sizes[size]
+
+
+    def genFontTag(self, font):
+        try: self.fonts[font]
+        except KeyError:
+            self.fonts[font] = gtk.TextTag('font '+font)
+            self.fonts[font].set_property('family', font)
+            self.textTags.add(self.fonts[font])
+            return self.fonts[font]
+        else:
+            return self.fonts[font]
 
 
     def changeJust(self, widget, data=None):
@@ -422,6 +459,11 @@ class MainWindow(object):
             if self.sizeTypeBox.get_active_text() == 'px':
                 sizeType = 'px'
             self.textBuffer.apply_tag(self.genSizeTag(self.textSizeEntry.get_active_text()+sizeType), self.textBuffer.get_iter_at_mark(self.sizeStart), self.textBuffer.get_iter_at_mark(self.sizeEnd))
+        try: self.fontStart
+        except AttributeError:
+            pass
+        else:
+            self.textBuffer.apply_tag(self.genFontTag(self.fontListBox.get_active_text()), self.textBuffer.get_iter_at_mark(self.fontStart), self.textBuffer.get_iter_at_mark(self.fontEnd))
         if text == ' ':
             beginWord = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
             endWord = self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert())
@@ -562,6 +604,8 @@ class MainWindow(object):
         sizeSet = False
         size = self.defSize
         sizeType = 'px'
+        fontSet = False
+        fontName = self.defFont
         for tag in curTags:
             if tag.get_property('weight-set'):
                 bolded = True
@@ -577,6 +621,9 @@ class MainWindow(object):
                 sizeSet = True
                 size = tag.get_property('scale')
                 sizeType = 'pt'
+            elif tag.get_property('family-set'):
+                fontSet = True
+                fontName = tag.get_property('family')
         if bolded and not self.boldButton.get_active():
             self.boldButton.handler_block(self.boldHandId)
             self.boldButton.set_active(True)
@@ -617,6 +664,10 @@ class MainWindow(object):
             self.textSizeEntry.child.handler_block(self.textHandId)
             self.textSizeEntry.child.set_text(str(int(size)))
             self.textSizeEntry.child.handler_unblock(self.textHandId)
+        if fontSet and not fontName == self.fontListBox.get_text():
+            self.fontListBox.handler_block(self.fontHandId)
+            self.fontListBox.set_active(self.fontList.index(fontName))
+            self.fontListBox.handler_unblock(self.fontHandId)
         if self.typed:
             if beginWord == None or endWord == None:
                 beginWord = self.textBuffer.get_iter_at_mark(self.curOldPos)
@@ -958,6 +1009,15 @@ class MainWindow(object):
                 self.sizeEnd = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), False)
 
 
+    def changeFont(self, combobox):
+        if self.textBuffer.get_selection_bounds() != ():
+            start, end = self.textBuffer.get_selection_bounds()
+            self.textBuffer.apply_tag(self.genFontTag(combobox.get_active_text()), start, end)
+        else:
+            self.fontStart = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), True)
+            self.fontEnd = self.textBuffer.create_mark(None, self.textBuffer.get_iter_at_mark(self.textBuffer.get_insert()), False)
+
+
     def tabFocus(self, notebook, page, page_num):
         self.textView.grab_focus()
 
@@ -966,7 +1026,7 @@ class MainWindow(object):
         self.window = gtk.Window()
         self.window.set_border_width(0)
         self.window.set_resizable(True)
-        self.window.set_default_size(400, 300)
+        self.window.set_default_size(675, 300)
         self.window.set_title("SmartTE, Smartboy's Text Editor")
         self.window.connect("delete_event", self.delete_event)
         self.window.connect("destroy", self.destroy)
@@ -995,6 +1055,11 @@ class MainWindow(object):
         self.sizes = {}
         self.defPixelSizes = [9,10,12,14,16,20,24,32,40,48,60,72]
         self.defScaleSizes = [1,2,3,4,5,6,7]
+        self.fonts = {}
+        self.fontList = []
+        for font in self.textView.get_pango_context().list_families():
+            self.fontList.append(font.get_name())
+        self.fontList = sorted(self.fontList)
 
         self.boldTag = gtk.TextTag('bold')
         self.boldTag.set_property('weight', pango.WEIGHT_BOLD)
@@ -1057,6 +1122,19 @@ class MainWindow(object):
         self.undlHandId = self.undlButton.connect('toggled', self.undlText)
         self.undlButton.set_tooltip_text('Underline selected text')
         sep1 = gtk.SeparatorToolItem()
+        self.fontListBox = gtk.combo_box_new_text()
+        #self.fontListBox.set_size_request(60, -1)
+        self.defFont = self.textView.get_pango_context().get_font_description().get_family()
+        for font in self.fontList:
+            self.fontListBox.append_text(font)
+        self.fontListBox.set_active(self.fontList.index(self.defFont))
+        self.fontHandId = self.fontListBox.connect('changed', self.changeFont)
+        self.fontListAlign = gtk.Alignment()
+        self.fontListAlign.set_padding(5, 5, 0, 0)
+        self.fontListAlign.add(self.fontListBox)
+        self.fontListItem = gtk.ToolItem()
+        self.fontListItem.add(self.fontListAlign)
+        sep2 = gtk.SeparatorToolItem()
         self.textSizeEntry = gtk.combo_box_entry_new_text()
         self.textSizeEntry.set_size_request(60, -1)
         self.defSize = self.textView.get_pango_context().get_font_description().get_size()/pango.SCALE
@@ -1087,7 +1165,7 @@ class MainWindow(object):
         self.sizeTypeAlign.add(self.sizeTypeBox)
         self.sizeTypeItem = gtk.ToolItem()
         self.sizeTypeItem.add(self.sizeTypeAlign)
-        sep2 = gtk.SeparatorToolItem()
+        sep3 = gtk.SeparatorToolItem()
         self.justLeftButton = gtk.RadioToolButton(None, gtk.STOCK_JUSTIFY_LEFT)
         self.leftId = self.justLeftButton.connect('toggled', self.changeJust)
         self.justLeftButton.set_tooltip_text('Justify text to the left')
@@ -1106,9 +1184,11 @@ class MainWindow(object):
         formbar.insert(self.italButton, -1)
         formbar.insert(self.undlButton, -1)
         formbar.insert(sep1, -1)
+        formbar.insert(self.fontListItem, -1)
+        formbar.insert(sep2, -1)
         formbar.insert(self.textSizeItem, -1)
         formbar.insert(self.sizeTypeItem, -1)
-        formbar.insert(sep2, -1)
+        formbar.insert(sep3, -1)
         formbar.insert(self.justLeftButton, -1)
         formbar.insert(self.justCenterButton, -1)
         formbar.insert(self.justRightButton, -1)
@@ -1123,12 +1203,8 @@ class MainWindow(object):
 
         statusbar = gtk.Statusbar()
         statusbar.set_has_resize_grip(False)
-        #self.colorEntry = gtk.Entry()
-        #self.colorEntry.set_text('Color')
-        #self.colorEntry.set_size_request(100, -1)
         statusHBox = gtk.HBox(False, 0)
         statusHBox.pack_start(statusbar, True)
-        #statusHBox.pack_start(self.colorEntry, False)
 
         vbox = gtk.VBox()
         vbox.pack_start(notebook, False)
