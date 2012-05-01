@@ -1,3 +1,5 @@
-This is just a temporary readme since there isn't really much to say about
-SmartTE. It depends on PyGTK, which should pull in all other needed
-dependancies. Happy writing with this text editor. ;)
+This is a rewrite of the original SmartTE that I created a couple years ago. That one still exists in the GTK2 branch of the Github repository this came from, but it will not be maintained in any manner. It was horribly designed as one of my first programming projects, and GTK2 is falling by the wayside anyway to make way for GTK3. If you'd like to hear more, I wrote a blog post about the old SmartTE and the rewrite I'm doing now. See it here: http://smartboyssite.net/blog/2012/04/09/my-thoughts-on-the-original-smartte/
+
+SmartTE depends on PyDispatcher, PyGObject, and GTK3. It is designed to be run on Python 3, not Python 2. Once I start implementing the output portion of SmartTE, it will also depend on a plugin framework like Yapsy.
+
+SmartTE is licensed under the SmartPL, my personal 4-clause alternative to the 3-clause BSD license.
