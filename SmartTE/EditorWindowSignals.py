@@ -1,1 +1,0 @@
-QUIT = 'window-quit'
