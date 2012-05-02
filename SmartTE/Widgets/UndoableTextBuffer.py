@@ -347,7 +347,7 @@ class UndoRemoveTag(Undoable):
 
 class TextBuffer(gtk.TextBuffer):
     def __init__(self, *args, **kwargs):
-        gtk.TextBuffer.__init__(self, *args)
+        super().__init__(*args, **kwargs)
         self.max_undo        = 250
         self.max_redo        = 250
         self.undo_stack      = MaxLengthEventSignallingDeque(self.max_undo, UndoSignals.UNDO_EMPTY, UndoSignals.UNDO_NOT_EMPTY, UndoSignals.UNDO_CHANGED)

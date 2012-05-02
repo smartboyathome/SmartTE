@@ -15,14 +15,15 @@ class MaxLengthEventSignallingDeque(deque):
     NoLongerEmptySignal when it has stopped being empty.
     '''
 
-    def __init__(self, MaxSize, EmptySignal, NoLongerEmptySignal, ChangedSignal, *args, **kwargs):
+    def __init__(self, MaxSize, EmptySignal, NoLongerEmptySignal, ChangedSignal, PopFromRight=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.EmptySignal = EmptySignal
         self.NoLongerEmptySignal = NoLongerEmptySignal
         self.ChangedSignal = ChangedSignal
         self.MaxSize = MaxSize
         if self.__len__() > 0:
-            self.__shrinkIfTooBig()
+            popfunc = super().pop if PopFromRight else super().popleft
+            self.__shrinkIfTooBig(popfunc)
             dispatcher.send(signal=self.NoLongerEmptySignal, sender=self)
         else:
             dispatcher.send(signal=self.EmptySignal, sender=self)
@@ -30,7 +31,7 @@ class MaxLengthEventSignallingDeque(deque):
     def __isTooLarge(self):
         return self.__len__() > self.MaxSize
     
-    def __shrinkIfTooBig(self):
+    def __shrinkIfTooBig(self, popfunc):
         while self.__isTooLarge():
             popfunc()
     
@@ -48,7 +49,7 @@ class MaxLengthEventSignallingDeque(deque):
         not_empty_now = self.__len__() != 0
         if was_empty and not_empty_now:
             dispatcher.send(signal=self.NoLongerEmptySignal, sender=self)
-        self.__shrinkIfTooBig()
+        self.__shrinkIfTooBig(popfunc)
 
     def __protoRemove(self, x, removeFunc):
         was_not_empty = self.__len__() != 0
