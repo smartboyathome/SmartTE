@@ -1,0 +1,6 @@
+UNDO_EMPTY = 'undostack-empty'
+UNDO_NOT_EMPTY = 'undostack-not-empty'
+REDO_EMPTY = 'redostack-empty'
+REDO_NOT_EMPTY = 'redostack-not-empty'
+UNDO_CHANGED = 'undostack-changed'
+REDO_CHANGED = 'redostack-changed'
