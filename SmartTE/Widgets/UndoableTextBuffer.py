@@ -3,7 +3,9 @@
 #
 # undostack.py - undo/redo provide
 # Copyright (C) Kuleshov Alexander 2010 <kuleshovmail@gmail.com>
-# 
+#
+# Ported to GTK+ 3 by Alexander 'smartboyathome' Abbott
+#
 # Incedit is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Lesser General Public License as published
 # by the Free Software Foundation, either version 3 of the License, or
@@ -24,19 +26,17 @@ from SmartTE.CustomCollections import MaxLengthEventSignallingDeque
 from pydispatch import dispatcher
 
 class Feature(object):
-
     def __init__(self, buffer):
         assert buffer is not None
         self.buffer = buffer
 
-
     def _print_range(self, start, end):
-        print("RANGE:", repr(self.buffer.get_text(start, end)))
+        print("RANGE:", repr(self.buffer.get_text(start, end, True)))
 
     def _print_char(self, iter):
         end = iter.copy()
         end.forward_char()
-        print("CHAR:", repr(self.buffer.get_text(iter, end)))
+        print("CHAR:", repr(self.buffer.get_text(iter, end, True)))
 
 bullet_point_re = re.compile(r'^(?:\d+\.|[\*\-])$')
 
@@ -109,7 +109,7 @@ class ListIndent(Feature):
         end.forward_find_char(lambda x, d: x == ' ', None, None)
         if end.is_end() or end.get_line() != iter.get_line():
             return False
-        text = self.buffer.get_text(iter, end)
+        text = self.buffer.get_text(iter, end, True)
         if text == self.bullet_point or bullet_point_re.match(text):
             return True
         return False
@@ -117,14 +117,14 @@ class ListIndent(Feature):
     def _insert_inside_list(self, buffer, start, end):
         insert_start = buffer.get_iter_at_offset(start)
         insert_end   = buffer.get_iter_at_offset(end)
-        text         = buffer.get_text(insert_start, insert_end)
+        text         = buffer.get_text(insert_start, insert_end, True)
         item_start   = insert_start.copy()
         self._to_list_item_start(item_start)
         list_end     = insert_end.copy()
         self._to_list_end(list_end)
         bullet_end   = item_start.copy()
         bullet_end.forward_to_tag_toggle(self.bullet_tag)
-        bullet_point = buffer.get_text(item_start, bullet_end)
+        bullet_point = buffer.get_text(item_start, bullet_end, True)
 
         buffer.apply_tag(self.list_tag, item_start, list_end)
         if text in ('\r', '\n'):
@@ -242,7 +242,7 @@ class ListIndent(Feature):
     def _delete_outside_list(self, start, end):
         next = start.copy()
         next.forward_char()
-        text = self.buffer.get_text(start, next)
+        text = self.buffer.get_text(start, next, True)
         if text not in ('\r', '\n'):
             return
         previous = start.copy()
@@ -311,7 +311,7 @@ class UndoDeleteText(Undoable):
         Undoable.__init__(self, buffer, startiter)
         self.end  = enditer.get_offset()
         self.tags = buffer.get_tags_at_offset(self.start, self.end)
-        self.text = buffer.get_text(startiter, enditer)
+        self.text = buffer.get_text(startiter, enditer, True)
 
     def undo(self):
         self.buffer.insert_at_offset(self.start, self.text)
@@ -351,7 +351,7 @@ class TextBuffer(gtk.TextBuffer):
         self.max_undo        = 250
         self.max_redo        = 250
         self.undo_stack      = MaxLengthEventSignallingDeque(self.max_undo, UndoSignals.UNDO_EMPTY, UndoSignals.UNDO_NOT_EMPTY, UndoSignals.UNDO_CHANGED)
-        self.redo_stack      = MaxLengthEventSignallingDeque(self.max_redo, UndoSignals.UNDO_EMPTY, UndoSignals.UNDO_NOT_EMPTY, UndoSignals.REDO_CHANGED)
+        self.redo_stack      = MaxLengthEventSignallingDeque(self.max_redo, UndoSignals.REDO_EMPTY, UndoSignals.REDO_NOT_EMPTY, UndoSignals.REDO_CHANGED)
         self.current_undo    = UndoCollection(self)
         self.lock_undo       = False
         self.undo_freq       = 300
@@ -434,7 +434,7 @@ class TextBuffer(gtk.TextBuffer):
         if len(self.current_undo.children) == 0:
             return
         self._undo_add(self.current_undo)
-        self.redo_stack = []
+        self.redo_stack.clear()
         self.current_undo = UndoCollection(self)
 
     def _undo_add(self, item):
