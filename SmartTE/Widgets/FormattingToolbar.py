@@ -1,21 +1,42 @@
 from gi.repository import Gtk, GLib
 from SmartTE.Widgets.Toolbar import Toolbar
-from SmartTE.Signals import ToolbarSignals
+from SmartTE.Signals import ToolbarSignals, FormatSignals
+from SmartTE.Widgets.ToolButtons import SignalToggledToolButton
 
 class FormattingToolbar(Toolbar):
     def __init__(self):
         super().__init__('Format')
-        self.appendToggle(Gtk.STOCK_BOLD, 'Bold', ToolbarSignals.BOLD_TOGGLE, 'Bold the selection')
-        self.appendToggle(Gtk.STOCK_ITALIC, 'Italic', ToolbarSignals.ITALIC_TOGGLE, 'Italicize the selection')
-        self.appendToggle(Gtk.STOCK_UNDERLINE, 'Underline', ToolbarSignals.UNDERLINE_TOGGLE, 'Underline the selection')
+        self.appendToggle(Gtk.STOCK_BOLD,
+                          'Bold',
+                          FormatSignals.BOLD_ACTIVATE,
+                          FormatSignals.BOLD_DEACTIVATE,
+                          ToolbarSignals.BOLD_ACTIVE,
+                          ToolbarSignals.BOLD_INACTIVE,
+                          'Enable or disable bold on the selection')
+        self.appendToggle(Gtk.STOCK_ITALIC,
+                          'Italic',
+                          FormatSignals.ITALIC_ACTIVATE,
+                          FormatSignals.ITALIC_DEACTIVATE,
+                          ToolbarSignals.ITALIC_ACTIVE,
+                          ToolbarSignals.ITALIC_INACTIVE,
+                          'Enable or disable italicize on the selection')
+        self.appendToggle(Gtk.STOCK_UNDERLINE,
+                          'Underline',
+                          FormatSignals.UNDERLINE_ACTIVATE,
+                          FormatSignals.UNDERLINE_DEACTIVATE,
+                          ToolbarSignals.UNDERLINE_ACTIVE,
+                          ToolbarSignals.UNDERLINE_INACTIVE,
+                          'Enable or disable underline on the selection')
         self.appendWidget(Gtk.SeparatorToolItem())
-        self.appendFontCombo(ToolbarSignals.FAMILY_CHANGE, 'Change the font family of the selection')
-        self.appendSizeCombo(ToolbarSignals.SIZE_CHANGE, 'Change the size of the selection')
+        self.appendFontCombo(ToolbarSignals.FAMILY_CHANGE,
+                             'Change the font family of the selection')
+        self.appendSizeCombo(ToolbarSignals.SIZE_CHANGE,
+                             'Change the size of the selection')
 
-    def appendToggle(self, stock, label, callbackSignal, tooltip):
-        button = Gtk.ToggleToolButton.new_from_stock(stock)
+    def appendToggle(self, stock, label, activateSignal, deactivateSignal, activeSignal, inactiveSignal, tooltip):
+        button = SignalToggledToolButton(activateSignal, deactivateSignal, activeSignal, inactiveSignal)
+        button.set_stock_id(stock)
         button.set_label(label)
-        button.connect('toggled', self.widgetCallback, callbackSignal)
         button.set_tooltip_text(tooltip)
         self.appendWidget(button)
 

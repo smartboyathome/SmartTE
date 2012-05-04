@@ -1,6 +1,6 @@
 from gi.repository import Gtk
 from SmartTE.Widgets.Toolbar import Toolbar
-from SmartTE.Widgets.SignalToggledToolButton import SignalToggledToolButton
+from SmartTE.Widgets.ToolButtons import SignalEnabledToolButton
 from SmartTE.Signals import ToolbarSignals, UndoSignals
 
 class FileToolbar(Toolbar):
@@ -26,7 +26,7 @@ class FileToolbar(Toolbar):
         self.appendWidget(button)
 
     def appendSignalButton(self, emptySignal, notEmptySignal, stock, label, callbackSignal, tooltip):
-        button = SignalToggledToolButton(emptySignal, notEmptySignal)
+        button = SignalEnabledToolButton(emptySignal, notEmptySignal)
         button.set_stock_id(stock)
         self.configureButton(button, label, callbackSignal, tooltip)
         self.appendWidget(button)

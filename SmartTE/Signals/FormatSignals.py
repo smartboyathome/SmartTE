@@ -1,0 +1,6 @@
+BOLD_ACTIVATE = 'activate-bold'
+BOLD_DEACTIVATE = 'deactivate-bold'
+ITALIC_ACTIVATE = 'activate-italic'
+ITALIC_DEACTIVATE = 'deactivate-italic'
+UNDERLINE_ACTIVATE = 'activate-underline'
+UNDERLINE_DEACTIVATE = 'deactivate-underline'
