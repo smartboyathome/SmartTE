@@ -1,10 +1,28 @@
 from pydispatch import dispatcher
-from collections import deque
+from collections import deque, UserDict
 
 '''
 These are a collection the custom collections which are used in SmartTE. They
 are more specialized versions of collections that already exist in Python.
 '''
+
+class OneToOneDict(UserDict):
+    '''
+        This is just a dict that keeps a one-to-one relationship between each
+        key and value. This just means that the data is stored twice in the
+        dict, with the original key acting as a key and the original value
+        acting as another key.
+    '''
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if isinstance(value, (list, tuple)):
+            for v in value:
+                super().__setitem__(v, key)
+        elif isinstance(value, dict):
+            for v in value.values():
+                super().__setitem__(v, key)
+        else:
+            super().__setitem__(value, key)
 
 class MaxLengthEventSignallingDeque(deque):
     '''

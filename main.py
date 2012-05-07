@@ -1,5 +1,5 @@
 from gi.repository import Gtk
-from SmartTE.Widgets import EditorWindow, FileToolbar, FormattingToolbar, FormattableTextBuffer
+from SmartTE.Widgets import EditorWindow, FileToolbar, FormattingToolbar, FormattableTextBuffer, FormattableTextView
 
 window = EditorWindow.EditorWindow()
 filebar = FileToolbar.FileToolbar()
@@ -12,7 +12,7 @@ notebook.append_page(filebar, filebar.label)
 notebook.append_page(formbar, formbar.label)
 
 scroll = Gtk.ScrolledWindow(None, None)
-textview = Gtk.TextView()
+textview = FormattableTextView.FormattableTextView()
 textview.set_buffer(FormattableTextBuffer.FormattableTextBuffer())
 scroll.add(textview)
 scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
