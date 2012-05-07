@@ -1,5 +1,5 @@
 from SmartTE.Widgets.UndoableTextBuffer import TextBuffer
-from SmartTE.Signals import ToolbarSignals, FormatSignals, TextViewSignals
+from SmartTE.Signals import ToolbarSignals, FormatSignals, FormatTags, TextViewSignals
 from SmartTE.CustomCollections import OneToOneDict
 from pydispatch import dispatcher
 from gi.repository import Pango, Gtk
@@ -13,14 +13,14 @@ class FormattableTextBuffer(TextBuffer):
     def initializeDefaultTags(self):
         self.tagsToSignals = OneToOneDict()
         self.tagSet = set()
-        self.generateTag('bold', property_args=[('weight', Pango.Weight.BOLD)],
+        self.generateTag(FormatTags.BOLD, property_args=[('weight', Pango.Weight.BOLD)],
             activateSignal=FormatSignals.BOLD_ACTIVATE, deactivateSignal=FormatSignals.BOLD_DEACTIVATE)
-        self.generateTag('italic', property_args=[('style', Pango.Style.ITALIC)],
+        self.generateTag(FormatTags.ITALIC, property_args=[('style', Pango.Style.ITALIC)],
             activateSignal=FormatSignals.ITALIC_ACTIVATE, deactivateSignal=FormatSignals.ITALIC_DEACTIVATE)
-        self.generateTag('underline', property_args=[('underline', Pango.Underline.SINGLE)],
+        self.generateTag(FormatTags.UNDERLINE, property_args=[('underline', Pango.Underline.SINGLE)],
             activateSignal=FormatSignals.UNDERLINE_ACTIVATE, deactivateSignal=FormatSignals.UNDERLINE_DEACTIVATE)
-        self.generateTag('error', property_args=[('underline', Pango.Underline.ERROR)])
-        self.generateTag('ignore')
+        self.generateTag(FormatTags.ERROR, property_args=[('underline', Pango.Underline.ERROR)])
+        self.generateTag(FormatTags.IGNORE)
 
     def generateTag(self, tag_name, property_args=[], activateSignal=None, deactivateSignal=None):
         tag = Gtk.TextTag.new(tag_name)
@@ -32,43 +32,21 @@ class FormattableTextBuffer(TextBuffer):
             self.tagsToSignals[tag_name] = {'activate':activateSignal, 'deactivate':deactivateSignal}
 
     def connectFormattingSignals(self):
-        dispatcher.connect(self.onBoldActive, signal=ToolbarSignals.BOLD_ACTIVE, sender=dispatcher.Any)
-        dispatcher.connect(self.onBoldInactive, signal=ToolbarSignals.BOLD_INACTIVE, sender=dispatcher.Any)
-        dispatcher.connect(self.onItalicActive, signal=ToolbarSignals.ITALIC_ACTIVE, sender=dispatcher.Any)
-        dispatcher.connect(self.onItalicInactive, signal=ToolbarSignals.ITALIC_INACTIVE, sender=dispatcher.Any)
-        dispatcher.connect(self.onUnderlineActive, signal=ToolbarSignals.UNDERLINE_ACTIVE, sender=dispatcher.Any)
-        dispatcher.connect(self.onUnderlineInactive, signal=ToolbarSignals.UNDERLINE_INACTIVE, sender=dispatcher.Any)
+        dispatcher.connect(self.activateTag, signal=ToolbarSignals.FORMATTING_ACTIVE, sender=dispatcher.Any)
+        dispatcher.connect(self.deactivateTag, signal=ToolbarSignals.FORMATTING_INACTIVE, sender=dispatcher.Any)
         dispatcher.connect(self.onFamilyChange, signal=ToolbarSignals.FAMILY_CHANGE, sender=dispatcher.Any)
         dispatcher.connect(self.onSizeChange, signal=ToolbarSignals.SIZE_CHANGE, sender=dispatcher.Any)
         dispatcher.connect(self.onCursorMoved, signal=TextViewSignals.CURSOR_MOVED, sender=dispatcher.Any)
 
-    def activateTag(self, name):
+    def activateTag(self, tag_name):
         if self.get_has_selection():
             bounds = self.get_selection_bounds()
-            self.apply_tag_by_name(name, bounds[0], bounds[1])
+            self.apply_tag_by_name(tag_name, bounds[0], bounds[1])
 
-    def deactivateTag(self, name):
+    def deactivateTag(self, tag_name):
         if self.get_has_selection():
             bounds = self.get_selection_bounds()
-            self.remove_tag_by_name(name, bounds[0], bounds[1])
-
-    def onBoldActive(self):
-        self.activateTag('bold')
-
-    def onBoldInactive(self):
-        self.deactivateTag('bold')
-
-    def onItalicActive(self):
-        self.activateTag('italic')
-
-    def onItalicInactive(self):
-        self.deactivateTag('italic')
-
-    def onUnderlineActive(self):
-        self.activateTag('underline')
-
-    def onUnderlineInactive(self):
-        self.deactivateTag('underline')
+            self.remove_tag_by_name(tag_name, bounds[0], bounds[1])
 
     def onFamilyChange(self):
         pass

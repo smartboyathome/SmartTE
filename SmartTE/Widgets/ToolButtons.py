@@ -41,12 +41,13 @@ class SignalToggledToolButton(Gtk.ToggleToolButton):
         inactiveSignal:    The signal which is sent when the user deactivates
                            the button.
     '''
-    def __init__(self, activateSignal, deactivateSignal, activeSignal, inactiveSignal, *args, **kwargs):
+    def __init__(self, tag_name, activateSignal, deactivateSignal, activeSignal, inactiveSignal, *args, **kwargs):
         super().__init__(*args, **kwargs)
         dispatcher.connect(self.onDeactivate, signal=deactivateSignal, sender=dispatcher.Any)
         dispatcher.connect(self.onActivate, signal=activateSignal, sender=dispatcher.Any)
         self.activeSignal = activeSignal
         self.inactiveSignal = inactiveSignal
+        self.tag_name = tag_name
         self.connect_after('clicked', self.onClicked)
     
     def onDeactivate(self):
@@ -62,7 +63,7 @@ class SignalToggledToolButton(Gtk.ToggleToolButton):
             self.onInactive()
 
     def onActive(self):
-        dispatcher.send(signal=self.activeSignal, sender=self)
+        dispatcher.send(signal=self.activeSignal, sender=self, tag_name=self.tag_name)
 
     def onInactive(self):
-        dispatcher.send(signal=self.inactiveSignal, sender=self)
+        dispatcher.send(signal=self.inactiveSignal, sender=self, tag_name=self.tag_name)

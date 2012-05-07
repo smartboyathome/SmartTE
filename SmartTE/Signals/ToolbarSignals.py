@@ -9,11 +9,7 @@ REDO = 'redo-action'
 QUIT = 'toolbar-quit'
 
 # FormattingToolbar signals
-BOLD_ACTIVE = 'bold-active'
-BOLD_INACTIVE = 'bold-inactive'
-ITALIC_ACTIVE = 'italic-active'
-ITALIC_INACTIVE = 'italic-inactive'
-UNDERLINE_ACTIVE = 'underline-active'
-UNDERLINE_INACTIVE = 'underline-inactive'
 FAMILY_CHANGE = 'change-font-family'
 SIZE_CHANGE = 'change-font-size'
+FORMATTING_ACTIVE = 'formatting-active'
+FORMATTING_INACTIVE = 'formatting-inactive'
