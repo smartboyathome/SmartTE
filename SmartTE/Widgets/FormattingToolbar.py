@@ -1,4 +1,4 @@
-from gi.repository import Gtk, GLib
+from gi.repository import Pango, Gtk, GLib
 from SmartTE.Widgets.Toolbar import Toolbar
 from SmartTE.Signals import ToolbarSignals, FormatSignals, FormatTags
 from SmartTE.Widgets.ToolButtons import SignalToggledToolButton
@@ -32,8 +32,10 @@ class FormattingToolbar(Toolbar):
                           'Enable or disable underline on the selection')
         self.appendWidget(Gtk.SeparatorToolItem())
         self.appendFontCombo(ToolbarSignals.FAMILY_CHANGE,
+                             FormatSignals.FONT_CHANGE,
                              'Change the font family of the selection')
         self.appendSizeCombo(ToolbarSignals.SIZE_CHANGE,
+                             FormatSignals.SIZE_CHANGE,
                              'Change the size of the selection')
 
     def appendToggle(self, stock, label, tag_name, activateSignal, deactivateSignal, activeSignal, inactiveSignal, tooltip):
@@ -43,7 +45,7 @@ class FormattingToolbar(Toolbar):
         button.set_tooltip_text(tooltip)
         self.appendWidget(button)
 
-    def appendSizeCombo(self, callbackSignal, tooltip):
+    def appendSizeCombo(self, callbackSignal, changeSignal, tooltip):
         sizes = [8, 9, 10, 12, 14, 16, 20, 24, 32, 36, 48, 60, 72]
         #defaultSize = Gtk.TextView().get_pango_context().get_font_description().get_size() / Pango.SCALE
         #if not defaultSize in sizes:
@@ -51,13 +53,17 @@ class FormattingToolbar(Toolbar):
         #    sizes.sort()
         liststore = Gtk.ListStore(str)
         for i in sizes:
-            liststore.append(['<span font="%i">%i</span>' % (i, i)])
+            #liststore.append(['<span font="{name}">{name}</span>'.format(name=i)])
+            liststore.append([str(i)])
         combo = Gtk.ComboBox.new_with_model_and_entry(liststore)
+        combo.set_entry_text_column(0)
+        combo.get_child().set_width_chars(3)
+        combo.connect('changed', self.sizeCallback, callbackSignal)
+        combo.get_child().connect('activate', self.sizeEntryCallback, callbackSignal)
         #combo.set_active(sizes.index(defaultSize))
-        combo.set_size_request(60, -1)
-        self.appendCombo(combo, callbackSignal, tooltip)
+        self.appendCombo(combo, tooltip)
 
-    def appendFontCombo(self, callbackSignal, tooltip):
+    def appendFontCombo(self, callbackSignal, changeSignal, tooltip):
         fontlist = self.get_pango_context().list_families()
         sortedfontlist = sorted(fontlist, key=lambda font: font.get_name())
         liststore = Gtk.ListStore(str)
@@ -65,16 +71,16 @@ class FormattingToolbar(Toolbar):
         for font in sortedfontlist:
             if not '.pcf' in font.get_name():
                 fontname = GLib.markup_escape_text(font.get_name())
-                liststore.append(['<span font_family="%s">%s</span>' % (fontname, fontname)])
-        combo = Gtk.ComboBox.new_with_model_and_entry(liststore)
-        #combo.set_active(sortedfontlist.index(defaultFont))
-        self.appendCombo(combo, callbackSignal, tooltip)
-        
-    def appendCombo(self, combo, callbackSignal, tooltip):
+                liststore.append(['<span font_family="{name}">{name}</span>'.format(name=fontname)])
+        combo = Gtk.ComboBox.new_with_model(liststore)
         renderer_markup = Gtk.CellRendererText()
         combo.pack_start(renderer_markup, True)
         combo.add_attribute(renderer_markup, "markup", 0)
-        combo.connect('changed', self.widgetCallback, callbackSignal)
+        combo.connect('changed', self.fontCallback, callbackSignal)
+        #combo.set_active(sortedfontlist.index(defaultFont))
+        self.appendCombo(combo, tooltip)
+        
+    def appendCombo(self, combo, tooltip):
         combo.set_tooltip_text(tooltip)
         align = Gtk.Alignment()
         align.set_padding(5, 5, 0, 0)
@@ -82,3 +88,16 @@ class FormattingToolbar(Toolbar):
         toolitem = Gtk.ToolItem()
         toolitem.add(align)
         self.appendWidget(toolitem)
+
+    def fontCallback(self, widget, signal):
+        active = widget.get_active()
+        active_text = widget.get_model()[active][0]
+        font_name = Pango.parse_markup(active_text, -1, '\u0000')[2]
+        self.widgetCallback(widget, signal, font_name=font_name)
+
+    def sizeCallback(self, widget, signal):
+        if widget.get_active() != -1:
+            self.widgetCallback(widget, signal, size=widget.get_child().get_text())
+
+    def sizeEntryCallback(self, widget, signal):
+        self.widgetCallback(widget, signal, size=widget.get_text())

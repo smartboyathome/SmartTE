@@ -12,5 +12,5 @@ class Toolbar(Gtk.Toolbar):
         self.insert(widget, -1)
         self.buttons.append(widget)
 
-    def widgetCallback(self, widget, signal):
-        dispatcher.send(signal=signal, sender=widget)
+    def widgetCallback(self, widget, signal, *args, **kwargs):
+        dispatcher.send(signal=signal, sender=widget, *args, **kwargs)
